@@ -1,0 +1,6 @@
+data-filtering-scripts/so_*
+data-filtering-scripts/stackoverflow.com.7z
+sosecure_js_ts_final.jsonl
+qdrant_storage/
+security_reports/
+venv/
