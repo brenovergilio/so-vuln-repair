@@ -1,6 +1,4 @@
 import json
-import os
-import sys
 from tqdm import tqdm
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, SparseVectorParams, SparseIndexParams, PointStruct, SparseVector
@@ -8,7 +6,7 @@ from sentence_transformers import SentenceTransformer
 from fastembed import SparseTextEmbedding
 
 # --- Configuration ---
-input_file = "sosecure_js_ts_final2.jsonl" 
+input_file = "sosecure_js_ts_final.jsonl" 
 collection_name = "sosecure_hybrid_js"
 qdrant_host = "localhost"
 qdrant_port = 6333

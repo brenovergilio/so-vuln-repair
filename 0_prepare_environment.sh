@@ -14,25 +14,33 @@ fi
 
 echo "🐧 DETECTED DISTRO: $DISTRO"
 
-# --- INSTALLATION FUNCTIONS ---
+PYTHON_BIN="python3.11"
 
 install_ubuntu() {
-    echo "📦 Starting instalation via APT..."
+    echo "📦 Starting installation via APT (Ubuntu/Debian)..."
+    sudo apt update
+    sudo apt install -y software-properties-common curl git
+
+    echo "🐍 Adding deadsnakes PPA for Python 3.11..."
+    sudo add-apt-repository -y ppa:deadsnakes/ppa
     sudo apt update
 
-    sudo apt install -y curl git python3-pip
-    
     curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
-    
-    sudo apt install -y nodejs psmisc lsof
+
+    sudo apt install -y nodejs psmisc lsof \
+        python3.11 python3.11-venv python3.11-dev \
+        build-essential
 }
 
 install_fedora() {
-    echo "📦 Starting instalation via DNF..."
+    echo "📦 Starting installation via DNF (Fedora/RHEL)..."
 
     curl -fsSL https://rpm.nodesource.com/setup_24.x | sudo bash -
     
-    sudo dnf install -y nodejs psmisc lsof git python3-pip
+    echo "🔧 Installing Python 3.11 and build tools..."
+    sudo dnf install -y nodejs psmisc lsof git \
+        python3.11 python3.11-devel \
+        gcc gcc-c++ make
 }
 
 case $DISTRO in
@@ -44,14 +52,19 @@ case $DISTRO in
         ;;
     *)
         echo "❌ Distro is not supported: $DISTRO"
-        echo "   Please, install nodejs, psmisc, lsof, git and python3-pip manually."
         exit 1
         ;;
 esac
 
-echo "✅ Verifying Node and NPM versions:"
-echo "   Node: $(node -v)"
-echo "   NPM:  $(npm -v)"
+echo "✅ Verifying Versions:"
+echo "   Node:   $(node -v)"
+
+if command -v python3.11 &> /dev/null; then
+    echo "   Python: $(python3.11 --version)"
+else
+    echo "❌ Python 3.11 not found! Something went wrong."
+    exit 1
+fi
 
 if [ -d "juice-shop" ]; then
     echo "📂 Folder 'juice-shop' already exists. Skipping git clone."
@@ -60,16 +73,27 @@ else
     git clone https://github.com/juice-shop/juice-shop.git --depth 1
 fi
 
-if [ -f "requirements.txt" ]; then
-    echo "🐍 Installing Python dependencies..."
-    
-    python3 -m venv venv
-    source venv/bin/activate
+echo "🐍 Setting up Virtual Environment using $PYTHON_BIN..."
+echo "   Ensuring pip is installed..."
+$PYTHON_BIN -m ensurepip --default-pip || true
 
-    pip3 install -r requirements.txt || \
-    pip3 install -r requirements.txt --break-system-packages
-else
-    echo "⚠️ 'requirements.txt' not found."
+if [ -d "venv" ]; then
+    rm -rf venv
 fi
 
-echo "🚀 Setup finished!"
+$PYTHON_BIN -m venv venv
+source venv/bin/activate
+
+echo "   Upgrading pip..."
+pip install --upgrade pip
+
+if [ -f "requirements.txt" ]; then
+    echo "📦 Installing from requirements.txt..."
+    pip install -r requirements.txt
+else
+    echo "⚠️  'requirements.txt' not found..."
+fi
+
+echo ""
+echo "🚀 Setup finished successfully!"
+echo "👉 To activate environment: source venv/bin/activate"

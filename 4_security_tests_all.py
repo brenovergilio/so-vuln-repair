@@ -3,6 +3,7 @@ import subprocess
 import json
 import time
 import requests
+import codeql_scanner
 
 # --- CONFIGURATIONS ---
 TARGET_DIR = "./juice-shop"
@@ -58,29 +59,13 @@ def check_deep_integrity():
     ok, _ = run_command(["npm", "run", "test:server"], "Unit Tests (Server)")
     return ok
 
-def run_sast_semgrep():
-    print(f"\n[SAST] Starting Semgrep...", flush=True)
-    output_file = f"{REPORT_DIR}/semgrep_results.json"
-    
-    cmd = [
-        "semgrep", "scan",
-        "--config", "p/javascript", "--config", "p/typescript",
-        "--config", "p/owasp-top-ten", "--config", "p/security-audit",
-        "--config", "p/nodejsscan", "--config", "p/expressjs", 
-        "--config", "p/secrets", "--config", "p/sql-injection",
-        "--json", "--output", output_file, TARGET_DIR
-    ]
-    
-    try:
-        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        with open(output_file, 'r') as f:
-            data = json.load(f)
-            total = len(data.get('results', []))
-            print(f"✅ SAST Finished: {total} detected issues.")
-            return total
-    except Exception as e:
-        print(f"❌ Error in SAST: {e}")
-        return 0
+def run_sast_codeQL():
+    print(f"\n[SAST] Starting CodeQL...", flush=True)
+    scan_result = codeql_scanner.run_scan("juice-shop", "security_reports")
+    total_bugs = scan_result.get("total", -1)
+        
+    return total_bugs
+
 
 def wait_for_app():
     print(f"[SETUP] Starting Juice Shop...", flush=True)
@@ -182,7 +167,7 @@ def run_experiment():
 
     if check_deep_integrity():
         metrics["integrity_status"] = True
-        metrics["sast_count"] = run_sast_semgrep()
+        metrics["sast_count"] = run_sast_codeQL()
         app_process = wait_for_app()
         if app_process:
             metrics["dast_count"] = run_dast_zap()

@@ -4,3 +4,8 @@ sosecure_js_ts_final.jsonl
 qdrant_storage/
 security_reports/
 venv/
+.env
+experiment_results/
+experiment_target/
+__pycache__/
+juice-shop/
