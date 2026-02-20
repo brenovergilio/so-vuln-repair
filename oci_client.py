@@ -28,15 +28,18 @@ class OCIClient:
 
     def generate_completion(self, system_prompt, user_prompt, temperature=None):        
         if temperature is None:
-            temperature = float(os.getenv("TEMPERATURE", 0.2))
+            # Lida com segurança caso a variável no .env esteja vazia ou ausente
+            temp_env = os.getenv("TEMPERATURE", "0.0")
+            temperature = float(temp_env) if temp_env else 0.0
 
+        # Formatação exata do prompt para a arquitetura Llama 3
         full_text = f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n{system_prompt}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{user_prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
 
         llm_request = oci.generative_ai_inference.models.LlamaLlmInferenceRequest(
             prompt=full_text,
             max_tokens=2048,
             temperature=temperature,
-            top_p=0.9,
+            top_p=1.0,
             is_stream=False
         )
 
@@ -52,12 +55,24 @@ class OCIClient:
             if response is None:
               return None
             
-            return response.data.inference_response.choices[0].text.strip()
+            # Extrai o texto gerado pela LLM
+            generated_text = response.data.inference_response.choices[0].text.strip()
+            
+            # Calcula os caracteres exatos para métrica de custo precisa na OCI
+            # e estima os tokens para o registro no CSV.
+            input_chars = len(full_text)
+            output_chars = len(generated_text)
+            
+            return {
+                "text": generated_text,
+                "input_chars": input_chars,
+                "output_chars": output_chars
+            }
+
         except oci.exceptions.ServiceError as e:
             if e.status == 429:
                 print("⏳ OCI Rate Limit hit. Waiting 10s...")
                 time.sleep(10)
-
                 return self.generate_completion(system_prompt, user_prompt, temperature)
             else:
                 print(f"❌ OCI Service Error: {e.message}")
