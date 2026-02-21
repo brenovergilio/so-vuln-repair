@@ -3,18 +3,18 @@ import subprocess
 import json
 import time
 import requests
+import re
+import uuid
 import codeql_scanner
 
 # --- CONFIGURATIONS ---
-TARGET_DIR = "./juice-shop"
-REPORT_DIR = "./security_reports"
+BASE_REPO = "./juice-shop"
+RESULTS_DIR = "./experiment_results/juice-shop"
+REPORTS_BASE_DIR = os.path.join(RESULTS_DIR, "reports")
 TARGET_URL = "http://localhost:3000"
-SWAGGER_URL = "https://raw.githubusercontent.com/juice-shop/juice-shop/master/swagger.yml"
 APP_STARTUP_TIMEOUT = 180 
 
-os.makedirs(REPORT_DIR, exist_ok=True)
-
-def run_command(command_list, step_name, cwd=TARGET_DIR, ignore_error=False):
+def run_command(command_list, step_name, cwd, ignore_error=False):
     print(f"   ⏳ [{step_name}] Executing...", end=" ", flush=True)
     try:
         result = subprocess.run(
@@ -41,38 +41,62 @@ def force_kill_port(port=3000):
     time.sleep(1)
     print("✅ OK")
 
-def check_deep_integrity():
+def extract_test_passing_count(output, framework):
+    if not output: return 0
+    try:
+        if framework == "mocha":
+            match = re.search(r'(\d+)\s+passing', output, re.IGNORECASE)
+            return int(match.group(1)) if match else 0
+        elif framework == "karma":
+            exec_match = re.search(r'Executed\s+(\d+)\s+of\s+\d+', output, re.IGNORECASE)
+            if not exec_match: return 0
+            executed = int(exec_match.group(1))
+            
+            fail_match = re.search(r'\((\d+)\s+FAILED\)', output, re.IGNORECASE)
+            failed = int(fail_match.group(1)) if fail_match else 0
+            
+            return executed - failed
+    except:
+        return 0
+    return 0
+
+def check_deep_integrity(target_dir, run_id):
     print(f"\n[DEEP INTEGRITY CHECK] Validating environment...", flush=True)
     force_kill_port(3000)
     
-    if not os.path.exists(f"{TARGET_DIR}/node_modules"):
-        ok, _ = run_command(["npm", "install"], "Installation (npm install)")
-        if not ok: return False
+    if not os.path.exists(f"{target_dir}/node_modules"):
+        ok, _ = run_command(["npm", "install", "--legacy-peer-deps"], "Installation", cwd=target_dir)
+        if not ok: return False, 0, 0
     
-    ok, _ = run_command(["npm", "run", "build:server"], "Build Backend")
-    if not ok: return False
-    ok, _ = run_command(["npm", "run", "build:frontend"], "Build Frontend")
-    if not ok: return False
+    ok, _ = run_command(["npm", "run", "build:server"], "Build Backend", cwd=target_dir)
+    if not ok: return False, 0, 0
+    ok, _ = run_command(["npm", "run", "build:frontend"], "Build Frontend", cwd=target_dir)
+    if not ok: return False, 0, 0
     
-    force_kill_port(3000) 
     print("   ℹ️  Running server unit tests...")
-    ok, _ = run_command(["npm", "run", "test:server"], "Unit Tests (Server)")
-    return ok
+    back_ok, back_out = run_command(["npm", "run", "test:server"], "Unit Tests (Server)", cwd=target_dir, ignore_error=True)
+    back_passed = extract_test_passing_count(back_out, "mocha")
+    
+    print("   ℹ️  Running frontend unit tests...")
+    frontend_path = os.path.join(target_dir, "frontend")
+    front_cmd = ["npm", "run", "test", "--", "--watch=false", "--browsers=ChromiumHeadless"]
+    
+    front_ok, front_out = run_command(front_cmd, "Unit Tests (Frontend)", cwd=frontend_path, ignore_error=True)
+    front_passed = extract_test_passing_count(front_out, "karma")
+    
+    return True, back_passed, front_passed
 
-def run_sast_codeQL():
+def run_sast_codeQL(target_dir, report_dir):
     print(f"\n[SAST] Starting CodeQL...", flush=True)
-    scan_result = codeql_scanner.run_scan("juice-shop", "security_reports")
-    total_bugs = scan_result.get("total", -1)
-        
-    return total_bugs
+    scan_result = codeql_scanner.run_scan(target_dir, report_dir)
+    return scan_result.get("total", -1)
 
-
-def wait_for_app():
-    print(f"[SETUP] Starting Juice Shop...", flush=True)
+def wait_for_app(target_dir, report_dir):
+    print(f"\n[SETUP] Starting Juice Shop...", flush=True)
     force_kill_port(3000)
     
-    log_file = open(f"{REPORT_DIR}/app_runtime.log", "w")
-    server_process = subprocess.Popen(["npm", "start"], cwd=TARGET_DIR, stdout=log_file, stderr=subprocess.STDOUT)
+    log_file = open(f"{report_dir}/app_runtime.log", "w")
+    server_process = subprocess.Popen(["npm", "start"], cwd=target_dir, stdout=log_file, stderr=subprocess.STDOUT)
     
     start_time = time.time()
     while time.time() - start_time < APP_STARTUP_TIMEOUT:
@@ -84,51 +108,93 @@ def wait_for_app():
         time.sleep(2)
         print(".", end="", flush=True)
     
-    print("\n❌ Timeout: Application did not started.")
+    print("\n❌ Timeout: Application did not start.")
     try: server_process.kill()
     except: pass
     return None
 
-def run_dast_zap():
-    print(f"\n[DAST] Starting ZAP API SCAN...", flush=True)
+def run_dast_zap(report_dir):
+    print(f"\n[DAST] Starting ZAP Full Scan (Authenticated as New User)...", flush=True)
     
-    swagger_path = os.path.abspath(f"{REPORT_DIR}/swagger.yml")
-    if not os.path.exists(swagger_path):
-        print(f"   ⬇️  Downloading Swagger...", end=" ", flush=True)
-        try:
-            r = requests.get(SWAGGER_URL)
-            with open(swagger_path, 'wb') as f: f.write(r.content)
-            print("✅ OK")
-        except Exception as e:
-            print(f"❌ Error in download: {e}")
+    # 1. Registro Dinâmico de Usuário
+    unique_id = uuid.uuid4().hex[:8]
+    email = f"zap_scanner_{unique_id}@juice-sh.op"
+    password = "ZapPassword123!"
+    jwt_token = ""
 
-    try: os.chmod(REPORT_DIR, 0o777)
-    except: pass
-    abs_report_dir = os.path.abspath(REPORT_DIR)
+    print(f"   👤 Registering new account ({email})...", end=" ", flush=True)
+    register_url = f"{TARGET_URL}/api/Users/"
+    register_data = {
+        "email": email,
+        "password": password,
+        "passwordRepeat": password,
+        "securityQuestion": {
+            "id": 1,
+            "question": "Your eldest siblings middle name?",
+            "createdAt": "2021-12-11T12:00:00.000Z",
+            "updatedAt": "2021-12-11T12:00:00.000Z"
+        },
+        "securityAnswer": "ZapBot"
+    }
     
+    try:
+        time.sleep(10) # Aguarda o backend estabilizar após subir
+        reg_resp = requests.post(register_url, json=register_data, timeout=10)
+        
+        if reg_resp.status_code in [200, 201]:
+            print("✅ OK")
+            print(f"   🔑 Logging in to retrieve JWT...", end=" ", flush=True)
+            login_url = f"{TARGET_URL}/rest/user/login"
+            login_data = {"email": email, "password": password}
+            
+            log_resp = requests.post(login_url, json=login_data, timeout=10)
+            if log_resp.status_code == 200:
+                jwt_token = log_resp.json().get('authentication', {}).get('token', '')
+                print("✅ OK")
+            else:
+                print(f"⚠️ Login Failed (HTTP {log_resp.status_code}). ZAP will run unauthenticated.")
+        else:
+            print(f"⚠️ Registration Failed (HTTP {reg_resp.status_code}). ZAP will run unauthenticated.")
+    except Exception as e:
+        print(f"❌ Error during auth flow: {e}. ZAP will run unauthenticated.")
+
+    try: os.chmod(report_dir, 0o777)
+    except: pass
+    abs_report_dir = os.path.abspath(report_dir)
+    
+    # 2. Configurando o ZAP
     cmd = [
         "docker", "run", "--rm", 
         "--network", "host",
         "-u", "0",
         "-v", f"{abs_report_dir}:/zap/wrk/:rw",
         "ghcr.io/zaproxy/zaproxy:stable",
-        "zap-api-scan.py",
-        "-t", "/zap/wrk/swagger.yml",
-        "-f", "openapi",
-        "-O", TARGET_URL,
+        "zap-full-scan.py",
+        "-t", TARGET_URL,
         "-J", "zap_results.json",
         "-r", "zap_report.html",
+        "-j", # AJAX Spider ativado
         "-a",
-        "-d",
-        "-I",
-        "-z",
-        "-config scanner.strength=HIGH -config scanner.threadPerHost=10 -config scanner.attackOn404=true"
-    ]   
+        "-d"
+    ]
     
-    print(f"   ℹ️  Attacking API...")
+    # 3. Injetando o JWT se obtido com sucesso
+    if jwt_token:
+        auth_header = f"Bearer {jwt_token}"
+        replacer_rules = [
+            "-config", "replacer.full_list(0).description=auth_jwt",
+            "-config", "replacer.full_list(0).enabled=true",
+            "-config", "replacer.full_list(0).matchtype=req_header",
+            "-config", "replacer.full_list(0).matchstr=Authorization",
+            "-config", "replacer.full_list(0).regex=false",
+            "-config", f"replacer.full_list(0).replacement={auth_header}"
+        ]
+        cmd.extend(replacer_rules)
+    
+    print(f"   ℹ️  Attacking Target with Spider & Auth (This will take a while)...")
     try:
         subprocess.run(cmd, capture_output=True, text=True)
-        json_path = os.path.join(REPORT_DIR, "zap_results.json")
+        json_path = os.path.join(report_dir, "zap_results.json")
         
         if os.path.exists(json_path) and os.path.getsize(json_path) > 0:
             with open(json_path, 'r') as f:
@@ -137,7 +203,7 @@ def run_dast_zap():
             alerts_list = data.get('site', [{}])[0].get('alerts', [])
             total_instances = 0
             
-            print(f"\n   📊 DETAILS ABOUT ALERTS (API SCAN):")
+            print(f"\n   📊 DETAILS ABOUT ALERTS (FULL SCAN):")
             print(f"   {'-'*60}")
             print(f"   {'ALERT NAME':<45} | {'RISK':<10} | {'QTD'}")
             print(f"   {'-'*60}")
@@ -147,8 +213,9 @@ def run_dast_zap():
                 risk = alert.get('riskdesc', 'UNK').split(' ')[0]
                 count = len(alert.get('instances', []))
                 
-                print(f"   {name:<45} | {risk:<10} | {count}")
-                total_instances += count
+                if risk != "Informational":
+                    print(f"   {name:<45} | {risk:<10} | {count}")
+                    total_instances += count
             
             print(f"   {'-'*60}")
             print(f"   ✅ TOTAL DAST: {total_instances}")
@@ -160,27 +227,68 @@ def run_dast_zap():
         return 0
 
 def run_experiment():
-    print("="*50)
-    print("🔬 SECURITY TESTS")
-    print("="*50)
-    metrics = {"integrity_status": False, "sast_count": 0, "dast_count": 0, "timestamp": time.time()}
+    print("="*60)
+    print("🛡️ BATCH SECURITY EVALUATION (Baseline + LLM Runs)")
+    print("="*60)
+    
+    os.makedirs(REPORTS_BASE_DIR, exist_ok=True)
+    
+    run_dirs = []
+    if os.path.exists(BASE_REPO):
+        run_dirs.append(("original", BASE_REPO))
+    
+    if os.path.exists(RESULTS_DIR):
+        for d in os.listdir(RESULTS_DIR):
+            dir_path = os.path.join(RESULTS_DIR, d)
+            if os.path.isdir(dir_path) and d != "reports":
+                run_dirs.append((d, dir_path))
 
-    if check_deep_integrity():
-        metrics["integrity_status"] = True
-        metrics["sast_count"] = run_sast_codeQL()
-        app_process = wait_for_app()
-        if app_process:
-            metrics["dast_count"] = run_dast_zap()
-            app_process.kill()
-            force_kill_port(3000)
-    else:
-        print("⛔ ABORTING.")
+    if not run_dirs:
+        print("⚠️ No target directories found.")
+        return
 
-    with open(f"{REPORT_DIR}/audit_metrics.json", "w") as f: json.dump(metrics, f, indent=4)
-    print("\n" + "="*50)
-    print(f"FINAL METRICS:\nIntegrity: {'✅ OK' if metrics['integrity_status'] else '❌ FAILED'}")
-    print(f"SAST: {metrics['sast_count']} | DAST: {metrics['dast_count']}")
-    print("="*50)
+    sec_csv_path = os.path.join(RESULTS_DIR, "security_metrics.csv")
+    tests_csv_path = os.path.join(RESULTS_DIR, "unit_tests_metrics.csv")
+    
+    if not os.path.exists(sec_csv_path):
+        with open(sec_csv_path, "w") as f:
+            f.write("Run_ID,Integrity_Passed,SAST_Vulnerabilities,DAST_Vulnerabilities\n")
+            
+    if not os.path.exists(tests_csv_path):
+        with open(tests_csv_path, "w") as f:
+            f.write("Run_ID,Backend_Tests_Passed,Frontend_Tests_Passed\n")
+
+    for run_id, target_dir in run_dirs:
+        report_dir = os.path.join(REPORTS_BASE_DIR, run_id)
+        os.makedirs(report_dir, exist_ok=True)
+
+        print(f"\n" + "="*50)
+        print(f"🔬 EVALUATING REPOSITORY: {run_id}")
+        print("="*50)
+
+        metrics = {"integrity": False, "sast": -1, "dast": -1}
+        
+        integrity_ok, back_passed, front_passed = check_deep_integrity(target_dir, run_id)
+
+        with open(tests_csv_path, "a") as f:
+            f.write(f"{run_id},{back_passed},{front_passed}\n")
+
+        if integrity_ok:
+            metrics["integrity"] = True
+            metrics["sast"] = run_sast_codeQL(target_dir, report_dir)
+            
+            app_process = wait_for_app(target_dir, report_dir)
+            if app_process:
+                metrics["dast"] = run_dast_zap(report_dir)
+                app_process.kill()
+                force_kill_port(3000)
+            else:
+                print(f"⚠️ App failed to start for {run_id}. Skipping DAST.")
+        else:
+            print(f"⛔ Integrity checks failed for {run_id}. Code is broken. Skipping SAST/DAST.")
+
+        with open(sec_csv_path, "a") as f:
+            f.write(f"{run_id},{metrics['integrity']},{metrics['sast']},{metrics['dast']}\n")
 
 if __name__ == "__main__":
     run_experiment()
