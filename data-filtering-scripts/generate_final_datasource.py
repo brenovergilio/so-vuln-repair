@@ -8,7 +8,7 @@ from tqdm import tqdm
 # --- Configuration ---
 posts_file = "data-filtering-scripts/so_security_posts.jsonl"
 comments_file = "data-filtering-scripts/so_security_comments.jsonl"
-output_file = "sosecure_js_ts_final2.jsonl"
+output_file = "sosecure_js_ts_final.jsonl"
 db_file = "data-filtering-scripts/temp_production.db"
 
 # 1. What we want (Whitelist)
@@ -36,21 +36,31 @@ SECURITY_WARNING_KEYWORDS = {
 def full_clean_text(text):
     if not text: return "", False
     
-    # 1. Anonimization
+    # 1. Anonimização
     text = re.sub(r'[\w\.-]+@[\w\.-]+\.\w+', '[EMAIL]', text)
     text = re.sub(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', '[URL]', text)
 
     soup = BeautifulSoup(text, "html.parser")
     
-    # Verify if have code block
-    code_blocks = soup.find_all(['code'])
+    # 2. Verificação de existência de código (ESTRITAMENTE <code>, conforme SOSecure)
+    code_blocks = soup.find_all('code')
     has_code = bool(code_blocks)
     
     if not has_code:
         return "", False
+        
+    # 3. Limpeza Customizada: Remover tudo, exceto <code>
+    for code_node in code_blocks:
+        original_content = str(code_node)
+        code_node.replace_with(f"__START_CODE_TAG__{original_content}__END_CODE_TAG__")
+
+    clean_text_with_placeholders = soup.get_text(separator=" ", strip=True)
     
-    final_text = soup.get_text(separator=" ", strip=True)
+    # Restauramos as tags HTML do código
+    final_text = clean_text_with_placeholders.replace("__START_CODE_TAG__", "").replace("__END_CODE_TAG__", "")
     
+    final_text = re.sub(r' {2,}', ' ', final_text)
+
     return final_text, True
 
 print("--- Starting Pipeline ---")

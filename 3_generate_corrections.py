@@ -20,7 +20,7 @@ OUTPUT_DIR = "./experiment_results/juice-shop"
 NUM_ITERATIONS = int(os.getenv("NUM_ITERATIONS", 3))
 
 # Files to analyze
-TARGET_EXTENSIONS = {".js", ".ts", ".jsx", ".tsx"}
+TARGET_EXTENSIONS = {".ts"}
 # Important directories in Juice Shop
 TARGET_DIRS = {"routes", "lib", "models", "data", "frontend/src/app"} 
 # Directories to ignore
@@ -50,8 +50,8 @@ RULES:
 """
 
 # --- TREE-SITTER SETUP ---
-language = get_language('javascript')
-parser = get_parser('javascript')
+language = get_language('typescript')
+parser = get_parser('typescript')
 
 try:
     oci_bot = OCIClient()
