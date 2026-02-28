@@ -7,9 +7,14 @@ from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
 from tree_sitter_languages import get_language, get_parser
 from dotenv import load_dotenv
+from qdrant_client import QdrantClient, models
+from fastembed import SparseTextEmbedding
 
 # --- CUSTOM MODULES ---
 from oci_client import OCIClient
+
+# --- HUGGING FACE TOKENIZER ---
+from transformers import AutoTokenizer
 
 # --- LOAD ENV ---
 load_dotenv()
@@ -29,7 +34,6 @@ IGNORE_DIRS = {"node_modules", ".git", "test", "dist", ".angular", "e2e", "vagra
 # --- OCI PRICING CONFIGURATION ---
 # A OCI cobra a categoria "Large Meta" (Llama 3.1 70B Instruct) a $0.0018 por 10.000 caracteres.
 OCI_PRICE_PER_10K_CHARS = 0.0018
-CHARS_PER_TOKEN_ESTIMATE = 4
 
 # --- SYSTEM PROMPTS (ENGLISH) ---
 PROMPT_RAW = """You are a Secure Code Assistant. 
@@ -49,6 +53,32 @@ RULES:
 4. Use the CONTEXT to apply specific fixes.
 """
 
+# --- TOKENIZER SETUP ---
+print("⏳ Loading Llama 3.1 Tokenizer...")
+try:
+    tokenizer = AutoTokenizer.from_pretrained("Xenova/Meta-Llama-3.1-8B-Instruct")
+    print("✅ Tokenizer loaded.")
+except Exception as e:
+    print(f"❌ Error loading tokenizer: {e}")
+    tokenizer = None
+    
+# --- QDRANT (RAG) SETUP ---
+print("⏳ Loading Qdrant (BM25)...")
+COLLECTION_NAME = "sosecure_bm25_js_ts"
+try:
+    qdrant_client = QdrantClient(host="localhost", port=6333)
+    sparse_model = SparseTextEmbedding(model_name="Qdrant/bm25")
+    print("✅ Qdrant loaded.")
+except Exception as e:
+    print(f"❌ Error loading Qdrant: {e}")
+    qdrant_client, sparse_model = None, None
+
+def count_llama_tokens(text: str) -> int:
+    """Counts exact tokens using Llama 3.1 vocabulary"""
+    if not text or tokenizer is None:
+        return 0
+    return len(tokenizer.encode(text))
+
 # --- TREE-SITTER SETUP ---
 language = get_language('typescript')
 parser = get_parser('typescript')
@@ -58,7 +88,7 @@ try:
 except Exception as e:
     print(f"❌ FATAL: Could not initialize OCI Client. Check .env file. Error: {e}")
     exit(1)
-
+    
 def count_syntax_errors(tree):
     query = language.query("(ERROR) @err")
     return len(query.captures(tree.root_node))
@@ -81,16 +111,17 @@ def clean_llm_response(response, original_code):
     match = re.search(r'```(?:javascript|typescript|js|ts)?\s*(.*?)\s*```', response, re.DOTALL | re.IGNORECASE)
     return match.group(1).strip() if match else response.strip()
 
-def calculate_cost_oci(input_chars, output_chars):
-    return ((input_chars + output_chars) / 10000.0) * OCI_PRICE_PER_10K_CHARS
+def calculate_cost_oci(total_chars):
+    return (total_chars / 10000.0) * OCI_PRICE_PER_10K_CHARS
 
 def process_file(file_path, treatment):
     try:
         valid_mods = 0
         syntax_errors = 0
         loc_churn = 0
-        file_input_chars = 0
-        file_output_chars = 0
+        file_input_tokens = 0
+        file_output_tokens = 0
+        file_total_chars_for_cost = 0 # Mantido apenas para calcular o custo na OCI
         file_duration = 0.0
         processed_functions = set()
         
@@ -115,18 +146,64 @@ def process_file(file_path, treatment):
                 system_prompt = PROMPT_RAG if treatment == "llm-rag" else PROMPT_RAW
                 user_content = f"CODE TO FIX:\n{func_text}"
                 
-                if treatment == "llm-rag":
-                    context = "" # TODO: RAG Context
-                    if context: user_content = f"VULNERABILITY CONTEXT:\n{context}\n\n{user_content}"
+                if treatment == "llm-rag" and qdrant_client and sparse_model:
+                    try:
+                        # 1. Gera o vetor esparso do código vulnerável (BM25)
+                        sparse_generator = sparse_model.embed([func_text])
+                        sparse_vector_obj = list(sparse_generator)[0]
+                        sparse_vector = models.SparseVector(
+                            indices=sparse_vector_obj.indices.tolist(),
+                            values=sparse_vector_obj.values.tolist()
+                        )
+                        
+                        # 2. Busca os Top-5 vizinhos no Qdrant
+                        results = qdrant_client.query_points(
+                            collection_name=COLLECTION_NAME,
+                            query=sparse_vector,
+                            using="bm25",
+                            limit=5, 
+                        )
+                        
+                        # 3. Monta o contexto juntando a resposta COMPLETA e TODOS os comentários (SOSecure)
+                        context_blocks = []
+                        for hit in results.points:
+                            p = hit.payload or {}
+                            answer_body = p.get('body', '')
+                            comments = p.get('comments', [])
+                            
+                            # Monta o bloco com a resposta e sua thread inteira de comentários
+                            block = f"--- Post Answer ---\n{answer_body}\n\nComments:\n"
+                            block += "\n".join([f"- {c}" for c in comments])
+                            
+                            context_blocks.append(block)
+                                
+                        # Separa as 5 respostas recuperadas
+                        context = "\n\n=======================\n\n".join(context_blocks)
+                        # Injeta o contexto no prompt do usuário
+                        if context:
+                            user_content = f"COMMUNITY SECURITY DISCUSSION:\n{context}\n\n{user_content}"
+                            
+                    except Exception as e:
+                        print(f"   ⚠️ RAG Retrieval failed: {e}")
+
+                # Conta os tokens reais do input antes de enviar
+                full_prompt = system_prompt + "\n" + user_content
+                file_input_tokens += count_llama_tokens(full_prompt)
 
                 start_time = time.time()
                 llm_response = oci_bot.generate_completion(system_prompt, user_content)
                 file_duration += (time.time() - start_time)
                 
                 if llm_response and isinstance(llm_response, dict) and "text" in llm_response:
-                    file_input_chars += llm_response.get("input_chars", 0)
-                    file_output_chars += llm_response.get("output_chars", 0)
-                    cleaned_code = clean_llm_response(llm_response["text"], func_text)
+                    response_text = llm_response["text"]
+                    
+                    # Conta os tokens reais do output recebido
+                    file_output_tokens += count_llama_tokens(response_text)
+                    
+                    # Acumula caracteres para o cálculo de custo da Oracle
+                    file_total_chars_for_cost += len(full_prompt) + len(response_text)
+                    
+                    cleaned_code = clean_llm_response(response_text, func_text)
                     
                     if cleaned_code != func_text.strip():
                         new_bytes = cleaned_code.encode('utf-8')
@@ -146,11 +223,11 @@ def process_file(file_path, treatment):
                         
             if not modification_made_in_this_pass: break
                 
-        return valid_mods, syntax_errors, loc_churn, file_input_chars, file_output_chars, file_duration
+        return valid_mods, syntax_errors, loc_churn, file_input_tokens, file_output_tokens, file_total_chars_for_cost, file_duration
 
     except Exception as e:
         print(f"⚠️  Error in {file_path}: {e}")
-        return 0, 0, 0, 0, 0, 0.0
+        return 0, 0, 0, 0, 0, 0, 0.0
 
 def run_iteration(treatment, i):
     run_id = f"{treatment}-{i+1}"
@@ -168,21 +245,23 @@ def run_iteration(treatment, i):
         if any(str(Path(root)).startswith(str(t)) for t in target_dirs_paths):
             files_to_process.extend([os.path.join(root, f) for f in files if any(f.endswith(ext) for ext in TARGET_EXTENSIONS)])
 
-    tot_valid = tot_syntax_err = tot_loc_churn = tot_in_chars = tot_out_chars = 0
+    tot_valid = tot_syntax_err = tot_loc_churn = tot_in_tokens = tot_out_tokens = tot_chars_for_cost = 0
     tot_time = 0.0
     
     with ThreadPoolExecutor(max_workers=2) as executor:
-        for v, s, l, in_c, out_c, dur in tqdm(executor.map(lambda f: process_file(f, treatment), files_to_process), total=len(files_to_process), desc=f"Refactoring"):
+        for v, s, l, in_t, out_t, t_chars, dur in tqdm(executor.map(lambda f: process_file(f, treatment), files_to_process), total=len(files_to_process), desc=f"Refactoring"):
             tot_valid += v; tot_syntax_err += s; tot_loc_churn += l
-            tot_in_chars += in_c; tot_out_chars += out_c; tot_time += dur
+            tot_in_tokens += in_t; tot_out_tokens += out_t; tot_chars_for_cost += t_chars
+            tot_time += dur
             
-    run_cost = calculate_cost_oci(tot_in_chars, tot_out_chars)
-    estimated_tokens = (tot_in_chars + tot_out_chars) // 4
+    run_cost = calculate_cost_oci(tot_chars_for_cost)
             
     print(f"✅ LLM Phase Complete. Patches: {tot_valid} | Cost: ${run_cost:.4f} | Time: {tot_time:.2f}s")
+    print(f"📊 Exact Tokens: {tot_in_tokens} (Input) + {tot_out_tokens} (Output) = {tot_in_tokens + tot_out_tokens} Total")
 
     with open(os.path.join(OUTPUT_DIR, "llm_metrics.csv"), "a") as f:
-        f.write(f"{run_id},{tot_valid},{tot_syntax_err},{tot_loc_churn},{tot_in_chars},{tot_out_chars},{tot_time:.2f},{run_cost:.4f},{estimated_tokens}\n")
+        # Escreve os tokens reais no CSV
+        f.write(f"{run_id},{tot_valid},{tot_syntax_err},{tot_loc_churn},{tot_in_tokens},{tot_out_tokens},{tot_time:.2f},{run_cost:.4f}\n")
 
 def main():
     if not os.path.exists(BASE_REPO): return print(f"❌ Error: {BASE_REPO} not found.")
@@ -190,7 +269,8 @@ def main():
     
     csv_path = os.path.join(OUTPUT_DIR, "run_metrics.csv")
     if not os.path.exists(csv_path):
-        with open(csv_path, "w") as f: f.write("Run_ID,Valid_Patches,Syntax_Errors_Rejected,LOC_Churn,Input_Chars,Output_Chars,Total_Time_Sec,Cost_USD,Estimated_Total_Tokens\n")
+        # Atualiza o cabeçalho para refletir as novas colunas
+        with open(csv_path, "w") as f: f.write("Run_ID,Valid_Patches,Syntax_Errors_Rejected,LOC_Churn,Input_Tokens,Output_Tokens,Total_Time_Sec,Cost_USD\n")
 
     for treatment in ["llm-raw"]: # ["llm-raw", "llm-rag"]
         for i in range(NUM_ITERATIONS): run_iteration(treatment, i)

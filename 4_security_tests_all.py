@@ -91,6 +91,58 @@ def run_sast_codeQL(target_dir, report_dir):
     scan_result = codeql_scanner.run_scan(target_dir, report_dir)
     return scan_result.get("total", -1)
 
+def run_sonarqube_scan(target_dir, run_id):
+    print(f"\n[CODE QUALITY] Starting SonarQube Scan for {run_id}...", flush=True)
+    abs_target_dir = os.path.abspath(target_dir)
+    
+    cmd = [
+        "docker", "run", "--rm",
+        "--network", "host",
+        "-e", "SONAR_HOST_URL=http://localhost:9000",
+        "-e", "SONAR_LOGIN=admin",
+        "-e", "SONAR_PASSWORD=admin",
+        "-v", f"{abs_target_dir}:/usr/src",
+        "sonarsource/sonar-scanner-cli",
+        f"-Dsonar.projectKey={run_id}",
+        "-Dsonar.sources=.",
+        "-Dsonar.exclusions=node_modules/**,frontend/node_modules/**,dist/**,build/**,test/**,coverage/**"
+    ]
+    
+    print(f"   ℹ️  Running Scanner...")
+    success, _ = run_command(cmd, "SonarScanner", cwd=target_dir, ignore_error=True)
+    if not success:
+        return -1, -1, -1, -1, -1
+        
+    print(f"   ℹ️  Waiting for SonarQube background task to finish...", end="", flush=True)
+    api_url = f"http://localhost:9000/api/measures/component?component={run_id}&metricKeys=bugs,vulnerabilities,code_smells,security_hotspots,sqale_index"
+    
+    metrics = {'bugs': -1, 'vulnerabilities': -1, 'code_smells': -1, 'security_hotspots': -1, 'sqale_index': -1}
+    
+    for _ in range(15):
+        time.sleep(3)
+        print(".", end="", flush=True)
+        try:
+            response = requests.get(api_url, auth=('admin', 'admin'))
+            if response.status_code == 200:
+                measures = response.json().get('component', {}).get('measures', [])
+                for m in measures:
+                    metrics[m['metric']] = int(m['value'])
+                
+                print(" ✅ OK")
+                print(f"   📊 SONARQUBE METRICS:")
+                print(f"      - Bugs: {metrics['bugs']}")
+                print(f"      - Vulnerabilities (SAST): {metrics['vulnerabilities']}")
+                print(f"      - Security Hotspots: {metrics['security_hotspots']}")
+                print(f"      - Code Smells: {metrics['code_smells']}")
+                print(f"      - Tech Debt (mins): {metrics['sqale_index']}")
+                
+                return metrics['bugs'], metrics['vulnerabilities'], metrics['code_smells'], metrics['security_hotspots'], metrics['sqale_index']
+        except:
+            pass
+
+    print(" ❌ Timeout or API Error")
+    return -1, -1, -1, -1, -1
+
 def wait_for_app(target_dir, report_dir):
     print(f"\n[SETUP] Starting Juice Shop...", flush=True)
     force_kill_port(3000)
@@ -116,7 +168,6 @@ def wait_for_app(target_dir, report_dir):
 def run_dast_zap(report_dir):
     print(f"\n[DAST] Starting ZAP Full Scan (Authenticated as New User)...", flush=True)
     
-    # 1. Registro Dinâmico de Usuário
     unique_id = uuid.uuid4().hex[:8]
     email = f"zap_scanner_{unique_id}@juice-sh.op"
     password = "ZapPassword123!"
@@ -138,7 +189,7 @@ def run_dast_zap(report_dir):
     }
     
     try:
-        time.sleep(10) # Aguarda o backend estabilizar após subir
+        time.sleep(10)
         reg_resp = requests.post(register_url, json=register_data, timeout=10)
         
         if reg_resp.status_code in [200, 201]:
@@ -162,7 +213,6 @@ def run_dast_zap(report_dir):
     except: pass
     abs_report_dir = os.path.abspath(report_dir)
     
-    # 2. Configurando o ZAP
     cmd = [
         "docker", "run", "--rm", 
         "--network", "host",
@@ -173,12 +223,11 @@ def run_dast_zap(report_dir):
         "-t", TARGET_URL,
         "-J", "zap_results.json",
         "-r", "zap_report.html",
-        "-j", # AJAX Spider ativado
+        "-j", 
         "-a",
         "-d"
     ]
     
-    # 3. Injetando o JWT se obtido com sucesso
     if jwt_token:
         auth_header = f"Bearer {jwt_token}"
         replacer_rules = [
@@ -252,7 +301,7 @@ def run_experiment():
     
     if not os.path.exists(sec_csv_path):
         with open(sec_csv_path, "w") as f:
-            f.write("Run_ID,Integrity_Passed,SAST_Vulnerabilities,DAST_Vulnerabilities\n")
+            f.write("Run_ID,Integrity_Passed,SAST_Vulnerabilities,DAST_Vulnerabilities,Sonar_Bugs,Sonar_Vulnerabilities,Sonar_Smells,Sonar_Hotspots,Sonar_Debt_Mins\n")
             
     if not os.path.exists(tests_csv_path):
         with open(tests_csv_path, "w") as f:
@@ -266,7 +315,7 @@ def run_experiment():
         print(f"🔬 EVALUATING REPOSITORY: {run_id}")
         print("="*50)
 
-        metrics = {"integrity": False, "sast": -1, "dast": -1}
+        metrics = {"integrity": False, "sast": -1, "dast": -1, "sonar": (-1, -1, -1, -1, -1)}
         
         integrity_ok, back_passed, front_passed = check_deep_integrity(target_dir, run_id)
 
@@ -275,8 +324,14 @@ def run_experiment():
 
         if integrity_ok:
             metrics["integrity"] = True
+            
+            # 1. SAST CodeQL
             metrics["sast"] = run_sast_codeQL(target_dir, report_dir)
             
+            # 2. SAST + Qualidade SonarQube
+            metrics["sonar"] = run_sonarqube_scan(target_dir, run_id)
+            
+            # 3. DAST ZAP
             app_process = wait_for_app(target_dir, report_dir)
             if app_process:
                 metrics["dast"] = run_dast_zap(report_dir)
@@ -287,8 +342,10 @@ def run_experiment():
         else:
             print(f"⛔ Integrity checks failed for {run_id}. Code is broken. Skipping SAST/DAST.")
 
+        # Escrevendo métricas no CSV incluindo o pacote SonarQube desempacotado
+        sb, sv, scs, sh, sq = metrics["sonar"]
         with open(sec_csv_path, "a") as f:
-            f.write(f"{run_id},{metrics['integrity']},{metrics['sast']},{metrics['dast']}\n")
+            f.write(f"{run_id},{metrics['integrity']},{metrics['sast']},{metrics['dast']},{sb},{sv},{scs},{sh},{sq}\n")
 
 if __name__ == "__main__":
     run_experiment()
