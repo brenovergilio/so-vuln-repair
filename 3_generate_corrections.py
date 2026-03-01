@@ -2,16 +2,17 @@ import os
 import time
 import shutil
 import re
+import tree_sitter_typescript as tsts
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
-from tree_sitter_languages import get_language, get_parser
+from tree_sitter import Language, Parser, Query, QueryCursor
 from dotenv import load_dotenv
 from qdrant_client import QdrantClient, models
 from fastembed import SparseTextEmbedding
 
 # --- CUSTOM MODULES ---
-from oci_client import OCIClient
+from llm_client import LLMClient
 
 # --- HUGGING FACE TOKENIZER ---
 from transformers import AutoTokenizer
@@ -21,13 +22,14 @@ load_dotenv()
 
 # --- CONFIGURATION ---
 BASE_REPO = "./juice-shop"
-OUTPUT_DIR = "./experiment_results/juice-shop"
+PROVIDER = os.getenv("PROVIDER", "local")
+OUTPUT_DIR = f"./experiment_results/{PROVIDER}/juice-shop"
 NUM_ITERATIONS = int(os.getenv("NUM_ITERATIONS", 3))
 
 # Files to analyze
 TARGET_EXTENSIONS = {".ts"}
 # Important directories in Juice Shop
-TARGET_DIRS = {"routes", "lib", "models", "data", "frontend/src/app"} 
+TARGET_DIRS = {"routes", "models", "frontend/src/app"} 
 # Directories to ignore
 IGNORE_DIRS = {"node_modules", ".git", "test", "dist", ".angular", "e2e", "vagrant"}
 
@@ -56,7 +58,7 @@ RULES:
 # --- TOKENIZER SETUP ---
 print("⏳ Loading Llama 3.1 Tokenizer...")
 try:
-    tokenizer = AutoTokenizer.from_pretrained("Xenova/Meta-Llama-3.1-8B-Instruct")
+    tokenizer = AutoTokenizer.from_pretrained("unsloth/Meta-Llama-3.1-8B-Instruct")
     print("✅ Tokenizer loaded.")
 except Exception as e:
     print(f"❌ Error loading tokenizer: {e}")
@@ -80,18 +82,61 @@ def count_llama_tokens(text: str) -> int:
     return len(tokenizer.encode(text))
 
 # --- TREE-SITTER SETUP ---
-language = get_language('typescript')
-parser = get_parser('typescript')
+language = Language(tsts.language_typescript())
+parser = Parser(language)
 
 try:
-    oci_bot = OCIClient()
+    llm_client = LLMClient(provider=PROVIDER)
 except Exception as e:
     print(f"❌ FATAL: Could not initialize OCI Client. Check .env file. Error: {e}")
     exit(1)
     
 def count_syntax_errors(tree):
-    query = language.query("(ERROR) @err")
-    return len(query.captures(tree.root_node))
+    query = Query(language, "(ERROR) @err")
+    cursor = QueryCursor(query)
+    captures = cursor.captures(tree.root_node)
+    
+    # Se não achar nenhum erro, retorna 0 (tamanho de uma lista vazia)
+    return len(captures.get("err", []))
+
+def sanitize_code_semantics(text: str) -> str:
+    text_bytes = bytearray(text.encode('utf-8'))
+    tree = parser.parse(bytes(text_bytes))
+    
+    # Captura comentários E chamadas de função
+    query_scm = """
+    (comment) @comment
+    (call_expression 
+        function: (identifier) @func_name
+    ) @call
+    """
+    query = Query(language, query_scm)
+    cursor = QueryCursor(query)
+    captures = cursor.captures(tree.root_node)
+    
+    nodes_to_remove = []
+    
+    # 1. Coleta comentários
+    if "comment" in captures:
+        nodes_to_remove.extend(captures["comment"])
+        
+    # 2. Coleta chamadas de função com "challenge" no nome
+    if "call" in captures and "func_name" in captures:
+        # Relaciona o nome da função com a chamada completa
+        for call_node, name_node in zip(captures["call"], captures["func_name"]):
+            name = bytes(text_bytes[name_node.start_byte:name_node.end_byte]).decode('utf-8').lower()
+            if "challenge" in name:
+                nodes_to_remove.append(call_node)
+
+    # 3. Remove duplicatas e ordena do fim para o início do arquivo
+    nodes_to_remove = sorted(list(set(nodes_to_remove)), key=lambda n: n.start_byte, reverse=True)
+    
+    for node in nodes_to_remove:
+        # Remove também eventuais vírgulas ou pontos-e-vírgula residuais se necessário, 
+        # mas fatiar os bytes do nó já limpa a chamada.
+        del text_bytes[node.start_byte:node.end_byte]
+        
+    return text_bytes.decode('utf-8').strip()
 
 def extract_functions(code_bytes):
     tree = parser.parse(code_bytes)
@@ -101,9 +146,32 @@ def extract_functions(code_bytes):
     (arrow_function) @func
     (method_definition) @func
     """
+    query = Query(language, query_scm)
+    cursor = QueryCursor(query)
+    captures = cursor.captures(tree.root_node)
+    
     funcs = []
-    for node, _ in language.query(query_scm).captures(tree.root_node):
+    for node in captures.get("func", []):
+        # 1. Tenta pegar o nome da função (se for declaração ou método)
+        name_node = node.child_by_field_name("name")
+        func_name = ""
+        
+        if name_node:
+            func_name = code_bytes[name_node.start_byte:name_node.end_byte].decode('utf-8')
+        else:
+            # 2. Se for uma função anônima atribuída a uma variável (ex: const meuChallenge = () => {})
+            parent = node.parent
+            if parent and parent.type == "variable_declarator":
+                name_node = parent.child_by_field_name("name")
+                if name_node:
+                    func_name = code_bytes[name_node.start_byte:name_node.end_byte].decode('utf-8')
+        
+        # --- O FILTRO DE RUÍDO ---
+        if "challenge" in func_name.lower():
+            continue
+            
         funcs.append((node.start_byte, node.end_byte, node.end_byte - node.start_byte))
+        
     return funcs
 
 def clean_llm_response(response, original_code):
@@ -125,7 +193,11 @@ def process_file(file_path, treatment):
         file_duration = 0.0
         processed_functions = set()
         
-        while True:
+        max_passes = 5 
+        current_pass = 0
+        
+        while current_pass < max_passes:
+            current_pass += 1
             with open(file_path, 'rb') as f: code_bytes = bytearray(f.read())
             tree = parser.parse(bytes(code_bytes))
             initial_errors = count_syntax_errors(tree)
@@ -137,19 +209,24 @@ def process_file(file_path, treatment):
             modification_made_in_this_pass = False
             
             for start, end, _ in functions:
-                func_text = code_bytes[start:end].decode('utf-8', errors='ignore')
+                original_func_text = code_bytes[start:end].decode('utf-8', errors='ignore')
                 
-                func_hash = hash(func_text)
+                # Limpa os comentários para não dar gabarito ao Llama
+                clean_func_text = sanitize_code_semantics(original_func_text)
+                
+                func_hash = hash(clean_func_text)
                 if func_hash in processed_functions: continue
                 processed_functions.add(func_hash)
                 
                 system_prompt = PROMPT_RAG if treatment == "llm-rag" else PROMPT_RAW
-                user_content = f"CODE TO FIX:\n{func_text}"
+                
+                # Enviamos a versão LIMPA para a IA
+                user_content = f"CODE TO FIX:\n{clean_func_text}"
                 
                 if treatment == "llm-rag" and qdrant_client and sparse_model:
                     try:
                         # 1. Gera o vetor esparso do código vulnerável (BM25)
-                        sparse_generator = sparse_model.embed([func_text])
+                        sparse_generator = sparse_model.embed([clean_func_text])
                         sparse_vector_obj = list(sparse_generator)[0]
                         sparse_vector = models.SparseVector(
                             indices=sparse_vector_obj.indices.tolist(),
@@ -191,11 +268,15 @@ def process_file(file_path, treatment):
                 file_input_tokens += count_llama_tokens(full_prompt)
 
                 start_time = time.time()
-                llm_response = oci_bot.generate_completion(system_prompt, user_content)
+                llm_response = llm_client.generate_completion(system_prompt, user_content)
                 file_duration += (time.time() - start_time)
                 
                 if llm_response and isinstance(llm_response, dict) and "text" in llm_response:
                     response_text = llm_response["text"]
+                    
+                    #print(f"\n🤖 [RESPOSTA DA IA - {os.path.basename(file_path)}]")
+                    #print(response_text)
+                    #print("=" * 60 + "\n")
                     
                     # Conta os tokens reais do output recebido
                     file_output_tokens += count_llama_tokens(response_text)
@@ -203,9 +284,10 @@ def process_file(file_path, treatment):
                     # Acumula caracteres para o cálculo de custo da Oracle
                     file_total_chars_for_cost += len(full_prompt) + len(response_text)
                     
-                    cleaned_code = clean_llm_response(response_text, func_text)
+                    cleaned_code = clean_llm_response(response_text, clean_func_text)
                     
-                    if cleaned_code != func_text.strip():
+                    # Comparamos com o clean_func_text. Se for diferente, houve refatoração real!
+                    if cleaned_code != clean_func_text.strip():
                         new_bytes = cleaned_code.encode('utf-8')
                         temp_bytes = bytearray(code_bytes)
                         temp_bytes[start:end] = new_bytes
@@ -216,7 +298,7 @@ def process_file(file_path, treatment):
                             
                         with open(file_path, 'wb') as f_out: f_out.write(temp_bytes)
                             
-                        loc_churn += abs(len(cleaned_code.splitlines()) - len(func_text.splitlines()))
+                        loc_churn += abs(len(cleaned_code.splitlines()) - len(clean_func_text.splitlines()))
                         valid_mods += 1
                         modification_made_in_this_pass = True
                         break 
@@ -267,12 +349,12 @@ def main():
     if not os.path.exists(BASE_REPO): return print(f"❌ Error: {BASE_REPO} not found.")
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     
-    csv_path = os.path.join(OUTPUT_DIR, "run_metrics.csv")
+    csv_path = os.path.join(OUTPUT_DIR, "llm_metrics.csv")
     if not os.path.exists(csv_path):
         # Atualiza o cabeçalho para refletir as novas colunas
         with open(csv_path, "w") as f: f.write("Run_ID,Valid_Patches,Syntax_Errors_Rejected,LOC_Churn,Input_Tokens,Output_Tokens,Total_Time_Sec,Cost_USD\n")
 
-    for treatment in ["llm-raw"]: # ["llm-raw", "llm-rag"]
+    for treatment in ["llm-rag"]: # ["llm-raw", "llm-rag"]
         for i in range(NUM_ITERATIONS): run_iteration(treatment, i)
 
 if __name__ == "__main__":
