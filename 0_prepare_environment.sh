@@ -19,7 +19,7 @@ PYTHON_BIN="python3.11"
 install_ubuntu() {
     echo "📦 Starting installation via APT (Ubuntu/Debian)..."
     sudo apt update
-    sudo apt install -y software-properties-common curl git
+    sudo apt install -y software-properties-common curl git p7zip-full
 
     echo "🐍 Adding deadsnakes PPA for Python 3.11..."
     sudo add-apt-repository -y ppa:deadsnakes/ppa
@@ -40,7 +40,7 @@ install_fedora() {
     echo "🔧 Installing Python 3.11 and build tools..."
     sudo dnf install -y nodejs psmisc lsof git \
         python3.11 python3.11-devel \
-        gcc gcc-c++ make
+        gcc gcc-c++ make p7zip p7zip-plugins
 }
 
 case $DISTRO in

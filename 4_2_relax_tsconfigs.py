@@ -44,7 +44,7 @@ def main():
         if os.path.exists(base):
             for d in os.listdir(base):
                 full_path = os.path.join(base, d)
-                if os.path.isdir(full_path) and d != "reports":
+                if os.path.isdir(full_path) and d != "reports" and "logs" not in d:
                     target_dirs.append(full_path)
                     
     for target in target_dirs:

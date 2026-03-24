@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class LLMClient:
-    def __init__(self, provider="oci"):
+    def __init__(self, provider="local"):
         """
         provider: 'oci' para Oracle Cloud (70B) ou 'local' para rede local (8B)
         """
@@ -119,14 +119,17 @@ class LLMClient:
                 {"role": "user", "content": user_prompt}
             ],
             "temperature": temperature,
-            "max_tokens": 2048
+            "options": {
+                "num_ctx": 4096,
+                "num_predict": 2048
+            }
         }
         
         # Concatenação simulada apenas para manter a métrica de caracteres no retorno
         simulated_full_text = system_prompt + user_prompt 
         
         try:
-            response = requests.post(self.local_url, json=payload, timeout=120)
+            response = requests.post(self.local_url, json=payload, timeout=None)
             response.raise_for_status()
             
             result = response.json()

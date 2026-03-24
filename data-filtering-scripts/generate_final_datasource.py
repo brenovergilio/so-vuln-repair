@@ -23,15 +23,59 @@ EXCLUDE_TAGS = {
     "swift", "r", "c", "asp.net", "laravel", "django", "spring", "flask"
 }
 
-# 3.Security-related Keywords
+# 3.Security-related Keywords (SOSecure Base + JS/TS Specifics)
 SECURITY_WARNING_KEYWORDS = {
-    "vulnerable", "vulnerability", "unsafe", "insecure", "security risk",
-    "security flaw", "attack", "exploit", "injection", "xss", "csrf", 
-    "sanitiz", "malicious", "hacker", "compromise", "leak", "sensitive",
-    "do not use", "avoid using", "dangerous", "eval is evil", "weakness",
-    "man-in-the-middle", "mitm", "dos", "denial of service", "hijack", "idor",
-    "cve", "rce", "cwe", "not safe"
+    # --- SOSecure Base Keywords ---
+    "secure", "security", "vulnerable", "exploit", "malware", "leak", "breach",
+    "weakness", "flaw", "bypass", "misuse", "deprecated", "failure", "compromise",
+    "exposure", "unauthorized", "privilege escalation", "malicious", "risk", "outage",
+    "denial of service", "memory leak", "race condition", "buffer overflow",
+    "sql injection", "vulnerability", "cve", "cwe", "dangerous", "insecure", "unsafe",
+    "safety", "command injection", "os command", "system command", "shell injection",
+    "command execution", "unsanitized input", "code injection", "dynamic code",
+    "eval", "exec", "dynamic execution", "insecure evaluation", "remote code execution",
+    "deserialization", "insecure deserialization", "object injection", "data tampering",
+    "untrusted data", "input validation", "bad input", "input filtering",
+    "malformed input", "invalid input", "path traversal", "directory traversal",
+    "relative path", "file access", "directory restrictions", "unrestricted file access",
+    "output encoding", "escaping", "xss", "html escaping", "url encoding",
+    "output sanitization", "cross-site scripting", "script injection",
+    "input sanitization", "unsafe user input", "client-side attack",
+    "weak cryptography", "deprecated algorithms", "insecure encryption",
+    "broken cipher", "insecure hashing", "cryptographic flaws",
+    "permission misconfiguration", "access control", "file permissions",
+    "resource access", "unauthorized access", "query injection", "database injection",
+    "query manipulation", "sql execution", "insecure temp file", "file system",
+    "temp file creation", "file manipulation", "insecure file handling",
+    "xml entity expansion", "entity reference", "infinite recursion",
+    "xml parser vulnerability", "dtd injection", "open redirect", "url redirection",
+    "phishing", "trust boundary", "untrusted urls", "url manipulation",
+    "information leakage", "error message", "detailed errors",
+    "sensitive data exposure", "verbose errors", "stack trace exposure",
+    "xml external entity", "xxe", "entity injection", "external resource",
+    "file inclusion", "html encoding", "unsafe output", "html injection",
+    "javascript injection", "ssrf", "internal server requests", "external request",
+    "remote requests", "server-side request forgery", "ssl certificate",
+    "certificate validation", "certificate trust", "insecure communication",
+    "man-in-the-middle", "certificate spoofing", "sensitive information",
+    "information exposure", "data leakage", "stack trace", "detailed error message",
+    "hardcoded credentials", "default passwords", "insecure authentication",
+    "password management", "exposed credentials", "security misconfiguration",
+    
+    # --- JS/TS & Node.js Specific Keywords (ADDED) ---
+    "prototype pollution", "__proto__", "constructor.prototype", # JS exclusive memory/logic corruption
+    "redos", "regular expression denial of service", "catastrophic backtracking", # Node.js event loop blocking
+    "nosql injection", "mongodb injection", "mongo injection", # Node.js DB specifics
+    "csrf", "cross-site request forgery", "cors misconfiguration", "permissive cors", # Web/API specifics
+    "ssti", "template injection", "server-side template injection", # Express template engines (Pug, EJS)
+    "jwt vulnerability", "json web token", "token spoofing", "timing attack", # API Auth flaws
+    "uninitialized buffer", "buffer allocation" # Legacy Node.js memory leaks (new Buffer)
 }
+
+# Compila a regex uma vez só para ficar super rápido
+# Exemplo: r'\b(secure|vulnerable|eval|xss)\b'
+regex_pattern = r'\b(?:' + '|'.join(map(re.escape, SECURITY_WARNING_KEYWORDS)) + r')\b'
+security_regex = re.compile(regex_pattern, re.IGNORECASE)
 
 def full_clean_text(text):
     if not text: return "", False
@@ -153,7 +197,7 @@ with open(output_file, 'w', encoding='utf-8') as out:
 
         has_warning = False
         for comm in raw_comments:
-            if any(kw in comm.lower() for kw in SECURITY_WARNING_KEYWORDS):
+            if security_regex.search(comm):
                 has_warning = True
                 break
         

@@ -5,6 +5,8 @@ import time
 import requests
 import re
 import uuid
+import sys
+import shutil
 import codeql_scanner
 from dotenv import load_dotenv
 
@@ -19,12 +21,15 @@ REPORTS_BASE_DIR = "./experiment_results/reports"
 TARGET_URL = "http://localhost:3000"
 APP_STARTUP_TIMEOUT = 180 
 
-# Define qual ambiente testar (default: 'all' testa ambos e a baseline)
-PROVIDER = os.getenv("PROVIDER", "all").lower()
+PROVIDER = os.getenv("PROVIDER", "local").lower()
+if PROVIDER not in ["local", "oci"]:
+    print(f"❌ ERRO FATAL: PROVIDER inválido ('{PROVIDER}'). Use apenas 'local' ou 'oci'.")
+    sys.exit(1)
+
 SONAR_LOGIN = os.getenv("SONAR_LOGIN", "admin")
 SONAR_PASS = os.getenv("SONAR_PASS", "admin")
 
-def run_command(command_list, step_name, cwd, ignore_error=False):
+def run_command(command_list, step_name, cwd, ignore_error=False, error_log_path=None):
     print(f"   ⏳ [{step_name}] Executing...", end=" ", flush=True)
     try:
         result = subprocess.run(
@@ -35,11 +40,18 @@ def run_command(command_list, step_name, cwd, ignore_error=False):
         return True, result.stdout
     except subprocess.CalledProcessError as e:
         print("❌ FAILED")
+        log_content = e.stdout if e.stdout else "⚠️ No output captured."
+        
         if not ignore_error:
             print(f"\n--- ERROR IN {step_name} ---")
-            log_content = e.stdout if e.stdout else "⚠️ No output captured."
             print(log_content[-3000:]) 
             print("------------------------------------------------")
+            
+        if error_log_path:
+            os.makedirs(os.path.dirname(error_log_path), exist_ok=True)
+            with open(error_log_path, "w", encoding="utf-8") as f:
+                f.write(log_content)
+                
         return False, e.stdout
 
 def force_kill_port(port=3000):
@@ -70,32 +82,47 @@ def extract_test_passing_count(output, framework):
         return 0
     return 0
 
-def check_deep_integrity(target_dir, run_id):
+def check_deep_integrity(target_dir, run_id, provider_dir):
     print(f"\n[DEEP INTEGRITY CHECK] Validating environment...", flush=True)
     force_kill_port(3000)
     
     build_success = True
+    build_errors_dir = os.path.join(provider_dir, f"{run_id}_logs", "build_errors")
     
     if not os.path.exists(f"{target_dir}/node_modules"):
-        ok, _ = run_command(["npm", "install", "--legacy-peer-deps"], "Installation", cwd=target_dir)
+        ok, _ = run_command(
+            ["npm", "install", "--legacy-peer-deps"], "Installation", cwd=target_dir, 
+            error_log_path=os.path.join(build_errors_dir, "npm_install_error.log")
+        )
         if not ok: build_success = False
     
-    # Adicionamos ignore_error=True para o script continuar mesmo se o tsc falhar
-    ok, _ = run_command(["npm", "run", "build:server"], "Build Backend", cwd=target_dir, ignore_error=True)
+    ok, _ = run_command(
+        ["npm", "run", "build:server"], "Build Backend", cwd=target_dir, ignore_error=True,
+        error_log_path=os.path.join(build_errors_dir, "build_server_error.log")
+    )
     if not ok: build_success = False
     
-    ok, _ = run_command(["npm", "run", "build:frontend"], "Build Frontend", cwd=target_dir, ignore_error=True)
+    ok, _ = run_command(
+        ["npm", "run", "build:frontend"], "Build Frontend", cwd=target_dir, ignore_error=True,
+        error_log_path=os.path.join(build_errors_dir, "build_frontend_error.log")
+    )
     if not ok: build_success = False
     
     print("   ℹ️  Running server unit tests...")
-    back_ok, back_out = run_command(["npm", "run", "test:server"], "Unit Tests (Server)", cwd=target_dir, ignore_error=True)
+    back_ok, back_out = run_command(
+        ["npm", "run", "test:server"], "Unit Tests (Server)", cwd=target_dir, ignore_error=True,
+        error_log_path=os.path.join(build_errors_dir, "test_server_error.log")
+    )
     back_passed = extract_test_passing_count(back_out, "mocha")
     
     print("   ℹ️  Running frontend unit tests...")
     frontend_path = os.path.join(target_dir, "frontend")
     front_cmd = ["npm", "run", "test", "--", "--watch=false", "--browsers=ChromiumHeadless"]
     
-    front_ok, front_out = run_command(front_cmd, "Unit Tests (Frontend)", cwd=frontend_path, ignore_error=True)
+    front_ok, front_out = run_command(
+        front_cmd, "Unit Tests (Frontend)", cwd=frontend_path, ignore_error=True,
+        error_log_path=os.path.join(build_errors_dir, "test_frontend_error.log")
+    )
     front_passed = extract_test_passing_count(front_out, "karma")
     
     return build_success, back_passed, front_passed
@@ -131,15 +158,14 @@ def run_sonarqube_scan(target_dir, run_id):
     cmd = [
         "docker", "run", "--rm",
         "--network", "host",
-        "-e", "SONAR_HOST_URL=http://localhost:9000",
-        "-e", f"SONAR_LOGIN={SONAR_LOGIN}",
-        "-e", f"SONAR_PASSWORD={SONAR_PASS}",
         "-v", f"{abs_target_dir}:/usr/src:z",
-        "sonarsource/sonar-scanner-cli"
+        "sonarsource/sonar-scanner-cli",
+        "-Dsonar.host.url=http://localhost:9000",
+        f"-Dsonar.login={SONAR_LOGIN}",
+        f"-Dsonar.password={SONAR_PASS}"
     ]
     
     print(f"   ℹ️  Running Scanner...")
-    # 👇 Mudamos para ignore_error=False para o Python cuspir o erro na tela se falhar
     success, output = run_command(cmd, "SonarScanner", cwd=target_dir, ignore_error=False)
     if not success:
         return -1, -1, -1, -1, -1
@@ -149,29 +175,33 @@ def run_sonarqube_scan(target_dir, run_id):
     
     metrics = {'bugs': -1, 'vulnerabilities': -1, 'code_smells': -1, 'security_hotspots': -1, 'sqale_index': -1}
     
-    for _ in range(30):
+    # Aumentei para 60 iterações (3 minutos) para dar tempo ao SonarQube
+    for _ in range(60):
         time.sleep(3)
         print(".", end="", flush=True)
         try:
             response = requests.get(api_url, auth=(SONAR_LOGIN, SONAR_PASS))
             if response.status_code == 200:
                 measures = response.json().get('component', {}).get('measures', [])
-                for m in measures:
-                    metrics[m['metric']] = int(m['value'])
                 
-                print(" ✅ OK")
-                print(f"   📊 SONARQUBE METRICS:")
-                print(f"      - Bugs: {metrics['bugs']}")
-                print(f"      - Vulnerabilities (SAST): {metrics['vulnerabilities']}")
-                print(f"      - Security Hotspots: {metrics['security_hotspots']}")
-                print(f"      - Code Smells: {metrics['code_smells']}")
-                print(f"      - Tech Debt (mins): {metrics['sqale_index']}")
-                
-                return metrics['bugs'], metrics['vulnerabilities'], metrics['code_smells'], metrics['security_hotspots'], metrics['sqale_index']
+                # A MÁGICA ESTÁ AQUI: Só sai do loop se as métricas não estiverem vazias!
+                if measures:
+                    for m in measures:
+                        metrics[m['metric']] = int(m['value'])
+                    
+                    print(" ✅ OK")
+                    print(f"   📊 SONARQUBE METRICS:")
+                    print(f"      - Bugs: {metrics['bugs']}")
+                    print(f"      - Vulnerabilities (SAST): {metrics['vulnerabilities']}")
+                    print(f"      - Security Hotspots: {metrics['security_hotspots']}")
+                    print(f"      - Code Smells: {metrics['code_smells']}")
+                    print(f"      - Tech Debt (mins): {metrics['sqale_index']}")
+                    
+                    return metrics['bugs'], metrics['vulnerabilities'], metrics['code_smells'], metrics['security_hotspots'], metrics['sqale_index']
         except:
             pass
 
-    print(" ❌ Timeout or API Error")
+    print(" ❌ Timeout or API Error (Measures empty)")
     return -1, -1, -1, -1, -1
 
 def wait_for_app(target_dir, report_dir):
@@ -197,7 +227,6 @@ def wait_for_app(target_dir, report_dir):
     return None
 
 def create_zap_hook(report_dir):
-    """Gera um arquivo de hook do ZAP para forçar a importação da OpenAPI/Swagger."""
     hook_path = os.path.join(report_dir, "zap_hook.py")
     hook_code = """
 def zap_started(zap, target):
@@ -231,7 +260,7 @@ def run_dast_zap(report_dir):
     }
     
     try:
-        time.sleep(10) # Aguarda o backend do Juice Shop estabilizar
+        time.sleep(10) 
         reg_resp = requests.post(register_url, json=register_data, timeout=10)
         
         if reg_resp.status_code in [200, 201]:
@@ -267,8 +296,8 @@ def run_dast_zap(report_dir):
         "-t", TARGET_URL,
         "-J", "zap_results.json",
         "-r", "zap_report.html",
-        "-j", # Ativa o Ajax Spider para a SPA Angular
-        "-a", # Ativa o Active Scan
+        "-j",
+        "-a", 
         "-d",
         "--hook", f"/zap/wrk/{hook_filename}"
     ]
@@ -320,6 +349,21 @@ def run_dast_zap(report_dir):
         print(f"❌ Error in Python: {e}")
         return 0
 
+def clean_previous_run_data(run_id, sec_csv_path, tests_csv_path, report_dir):
+    """Limpa diretórios de relatórios antigos e expurga linhas velhas dos CSVs para o mesmo run_id."""
+    if os.path.exists(report_dir):
+        shutil.rmtree(report_dir)
+    os.makedirs(report_dir, exist_ok=True)
+    
+    for csv_file in [sec_csv_path, tests_csv_path]:
+        if os.path.exists(csv_file):
+            with open(csv_file, "r") as f:
+                lines = f.readlines()
+            with open(csv_file, "w") as f:
+                for line in lines:
+                    if not line.startswith(f"{run_id},"):
+                        f.write(line)
+
 def run_experiment():
     print("="*60)
     print(f"🛡️ BATCH SECURITY EVALUATION (Provider: {PROVIDER.upper()})")
@@ -329,32 +373,29 @@ def run_experiment():
     
     run_dirs = []
     
-    # 1. Baseline (Sem refatoração) SOMENTE se PROVIDER for 'all'
-    if PROVIDER == "all" and os.path.exists(BASE_REPO):
-        run_dirs.append(("baseline-original", BASE_REPO))
+    # CRÍTICA RESOLVIDA: Adicionando a baseline incondicionalmente
+    if os.path.exists(BASE_REPO):
+        run_dirs.append(("baseline-original", BASE_REPO, "."))
     
-    # 2. Experimentos Locais (Llama 3.1 8B)
-    if PROVIDER in ["local", "all"] and os.path.exists(RESULTS_DIR_LOCAL):
-        for d in os.listdir(RESULTS_DIR_LOCAL):
+    if PROVIDER == "local" and os.path.exists(RESULTS_DIR_LOCAL):
+        for d in sorted(os.listdir(RESULTS_DIR_LOCAL)):
             dir_path = os.path.join(RESULTS_DIR_LOCAL, d)
-            if os.path.isdir(dir_path) and d != "reports":
-                run_dirs.append((f"local-{d}", dir_path))
+            if os.path.isdir(dir_path) and d != "reports" and not d.endswith("logs"):
+                run_dirs.append((d, dir_path, RESULTS_DIR_LOCAL))
                 
-    # 3. Experimentos OCI (Llama 3.3 70B)
-    if PROVIDER in ["oci", "all"] and os.path.exists(RESULTS_DIR_OCI):
-        for d in os.listdir(RESULTS_DIR_OCI):
+    if PROVIDER == "oci" and os.path.exists(RESULTS_DIR_OCI):
+        for d in sorted(os.listdir(RESULTS_DIR_OCI)):
             dir_path = os.path.join(RESULTS_DIR_OCI, d)
-            if os.path.isdir(dir_path) and d != "reports":
-                run_dirs.append((f"oci-{d}", dir_path))
+            if os.path.isdir(dir_path) and d != "reports" and not d.endswith("logs"):
+                run_dirs.append((d, dir_path, RESULTS_DIR_OCI))
 
     if len(run_dirs) == 0: 
-        print(f"⚠️ No target directories found for provider '{PROVIDER}'. Check your .env or paths.")
+        print(f"⚠️ No target directories found. Check your paths.")
         return
 
     sec_csv_path = os.path.join(REPORTS_BASE_DIR, "security_metrics.csv")
     tests_csv_path = os.path.join(REPORTS_BASE_DIR, "unit_tests_metrics.csv")
     
-    # Prepara os CSVs se não existirem
     if not os.path.exists(sec_csv_path):
         with open(sec_csv_path, "w") as f:
             f.write("Run_ID,Integrity_Passed,SAST_Vulnerabilities,DAST_Vulnerabilities,Sonar_Bugs,Sonar_Vulnerabilities,Sonar_Smells,Sonar_Hotspots,Sonar_Debt_Mins\n")
@@ -363,27 +404,32 @@ def run_experiment():
         with open(tests_csv_path, "w") as f:
             f.write("Run_ID,Backend_Tests_Passed,Frontend_Tests_Passed\n")
 
-    for run_id, target_dir in run_dirs:
+    for run_id, target_dir, provider_dir in run_dirs:
         report_dir = os.path.join(REPORTS_BASE_DIR, run_id)
-        os.makedirs(report_dir, exist_ok=True)
+        
+        # Pula a baseline se os relatórios dela já existirem, garantindo que rode só "uma vez"
+        if run_id == "baseline-original" and os.path.exists(report_dir) and os.listdir(report_dir):
+            print(f"\n✅ Pulando {run_id}: Já analisado anteriormente.")
+            continue
 
         print(f"\n" + "="*50)
         print(f"🔬 EVALUATING REPOSITORY: {run_id}")
         print("="*50)
         
+        # CRÍTICA RESOLVIDA: Função para limpar lixo prévio e evitar duplicatas no CSV
+        clean_previous_run_data(run_id, sec_csv_path, tests_csv_path, report_dir)
+        
         metrics = {"integrity": False, "sast": -1, "dast": -1, "sonar": (-1, -1, -1, -1, -1)}
         
-        integrity_ok, back_passed, front_passed = check_deep_integrity(target_dir, run_id)
+        integrity_ok, back_passed, front_passed = check_deep_integrity(target_dir, run_id, provider_dir)
         metrics["integrity"] = integrity_ok
 
         with open(tests_csv_path, "a") as f:
             f.write(f"{run_id},{back_passed},{front_passed}\n")
 
-        # RODA O SAST (SONAR E CODEQL) MESMO SE A COMPILAÇÃO TIVER FALHADO!
         metrics["sast"] = run_sast_codeQL(target_dir, report_dir)
         metrics["sonar"] = run_sonarqube_scan(target_dir, run_id)
         
-        # Tenta subir a aplicação. Se o LLM quebrou tudo, o app_process será None
         app_process = wait_for_app(target_dir, report_dir)
         if app_process:
             metrics["dast"] = run_dast_zap(report_dir)
@@ -392,7 +438,6 @@ def run_experiment():
         else:
             print(f"⚠️ App failed to start for {run_id} due to LLM breaking the code. Skipping DAST.")
 
-        # Escreve os resultados!
         sb, sv, scs, sh, sq = metrics["sonar"]
         with open(sec_csv_path, "a") as f:
             f.write(f"{run_id},{metrics['integrity']},{metrics['sast']},{metrics['dast']},{sb},{sv},{scs},{sh},{sq}\n")

@@ -6,7 +6,12 @@ security_reports/
 venv/
 .env
 experiment_results/
+experiment_results copy/
 juice-shop/
 __pycache__/
 juice-shop/
 sonarqube/
+baseline-original_logs/
+compressed_contexts.json
+raw_so_contexts.json
+token_analysis_report.txt
