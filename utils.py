@@ -5,6 +5,9 @@ from transformers import AutoTokenizer
 from qdrant_client import QdrantClient, models
 from fastembed import SparseTextEmbedding
 import hashlib
+import requests
+import os
+import sys
 
 def get_llama_tokenizer():
   print("⏳ Loading Llama 3.1 Tokenizer...")
@@ -28,8 +31,8 @@ def get_qdrant_client():
 def get_dirs_and_extensions():
   return [{".ts"}, # TARGET_EXTENSIONS
         {".spec.ts"}, # IGNORE_EXTENSIONS
-        {"routes", "models", "frontend/src/app"}, # TARGET_DIRS
-        {"node_modules", ".git", "test", "dist", ".angular", "e2e", "vagrant", "assets", "environments"}, # IGNORE_DIRS
+        {"routes", "models"}, # TARGET_DIRS
+        {"node_modules", ".git", "test", "dist", ".angular", "e2e", "vagrant", "assets", "environments", "frontend"}, # IGNORE_DIRS
         {"verify.ts", "vulnCodeFixes.ts", "vulnCodeSnippet.ts"}] # IGNORE_FILES
   
 def count_llama_tokens(text: str, tokenizer) -> int:
@@ -217,3 +220,26 @@ def retrieve_from_qdrant(qdrant_client, sparse_model, clean_func_text, limit = 5
 def get_func_id(func_text: str) -> str:
     """Gera um Hash determinístico da função para ser usado como chave no JSON."""
     return hashlib.md5(func_text.encode('utf-8')).hexdigest()
+
+def get_type_aware_context(file_path: str, clean_func_text = "") -> str:
+    """
+    Consulta o microserviço Node.js para extrair as assinaturas de tipo
+    (Type-Aware Context) do arquivo alvo.
+    """
+    try:
+        url = "http://localhost:3001/extract-types" 
+        payload = {
+            "filePath": file_path,
+            "functionText": clean_func_text  # <-- Injetamos o código aqui
+        }
+        response = requests.post(url, json=payload, timeout=30)
+        
+        if response.status_code == 200:
+            data = response.json()
+            type_context = data.get("type_context", "")
+            if type_context:
+                return f"[LIBRARY SIGNATURES (Type-Aware Context)]\n{type_context}\n\n"
+        return ""
+        
+    except requests.exceptions.RequestException as e:
+        sys.exit(f"⚠️ Aviso: Falha ao contactar o Type-Extractor. Ignorando tipagem profunda. Erro: {e}")

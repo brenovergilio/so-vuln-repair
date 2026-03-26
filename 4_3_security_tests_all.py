@@ -69,21 +69,12 @@ def extract_test_passing_count(output, framework):
         if framework == "mocha":
             match = re.search(r'(\d+)\s+passing', output, re.IGNORECASE)
             return int(match.group(1)) if match else 0
-        elif framework == "karma":
-            exec_match = re.search(r'Executed\s+(\d+)\s+of\s+\d+', output, re.IGNORECASE)
-            if not exec_match: return 0
-            executed = int(exec_match.group(1))
-            
-            fail_match = re.search(r'\((\d+)\s+FAILED\)', output, re.IGNORECASE)
-            failed = int(fail_match.group(1)) if fail_match else 0
-            
-            return executed - failed
     except:
         return 0
     return 0
 
 def check_deep_integrity(target_dir, run_id, provider_dir):
-    print(f"\n[DEEP INTEGRITY CHECK] Validating environment...", flush=True)
+    print(f"\n[DEEP INTEGRITY CHECK] Validating API environment...", flush=True)
     force_kill_port(3000)
     
     build_success = True
@@ -96,18 +87,14 @@ def check_deep_integrity(target_dir, run_id, provider_dir):
         )
         if not ok: build_success = False
     
+    # Compila apenas o backend
     ok, _ = run_command(
         ["npm", "run", "build:server"], "Build Backend", cwd=target_dir, ignore_error=True,
         error_log_path=os.path.join(build_errors_dir, "build_server_error.log")
     )
     if not ok: build_success = False
     
-    ok, _ = run_command(
-        ["npm", "run", "build:frontend"], "Build Frontend", cwd=target_dir, ignore_error=True,
-        error_log_path=os.path.join(build_errors_dir, "build_frontend_error.log")
-    )
-    if not ok: build_success = False
-    
+    # Testa apenas o backend
     print("   ℹ️  Running server unit tests...")
     back_ok, back_out = run_command(
         ["npm", "run", "test:server"], "Unit Tests (Server)", cwd=target_dir, ignore_error=True,
@@ -115,27 +102,19 @@ def check_deep_integrity(target_dir, run_id, provider_dir):
     )
     back_passed = extract_test_passing_count(back_out, "mocha")
     
-    print("   ℹ️  Running frontend unit tests...")
-    frontend_path = os.path.join(target_dir, "frontend")
-    front_cmd = ["npm", "run", "test", "--", "--watch=false", "--browsers=ChromiumHeadless"]
-    
-    front_ok, front_out = run_command(
-        front_cmd, "Unit Tests (Frontend)", cwd=frontend_path, ignore_error=True,
-        error_log_path=os.path.join(build_errors_dir, "test_frontend_error.log")
-    )
-    front_passed = extract_test_passing_count(front_out, "karma")
-    
-    return build_success, back_passed, front_passed
+    # Retorna 0 fixo para o frontend_passed para não quebrar a estrutura do CSV
+    return build_success, back_passed, 0
 
 def inject_sonar_properties(target_dir, run_id):
-    print(f"   📝 Injecting sonar-project.properties...", end=" ", flush=True)
+    print(f"   📝 Injecting sonar-project.properties (API Focused)...", end=" ", flush=True)
     properties_path = os.path.join(target_dir, "sonar-project.properties")
+    # Exclui o frontend inteiro das analises do SonarQube
     content = f"""sonar.projectKey={run_id}
-sonar.projectName=Juice Shop - {run_id}
+sonar.projectName=Juice Shop API - {run_id}
 sonar.sources=.
-sonar.exclusions=node_modules/**,frontend/node_modules/**,data/**,test/**,e2e/**,build/**,dist/**,**/*.spec.ts,reports/**
+sonar.exclusions=node_modules/**,frontend/**,data/**,test/**,e2e/**,build/**,dist/**,**/*.spec.ts,reports/**
 sonar.language=ts
-sonar.javascript.lcov.reportPaths=build/reports/coverage/frontend-tests/lcov.info,build/reports/coverage/server-tests/lcov.info
+sonar.javascript.lcov.reportPaths=build/reports/coverage/server-tests/lcov.info
 """
     try:
         with open(properties_path, "w") as f:
@@ -175,7 +154,6 @@ def run_sonarqube_scan(target_dir, run_id):
     
     metrics = {'bugs': -1, 'vulnerabilities': -1, 'code_smells': -1, 'security_hotspots': -1, 'sqale_index': -1}
     
-    # Aumentei para 60 iterações (3 minutos) para dar tempo ao SonarQube
     for _ in range(60):
         time.sleep(3)
         print(".", end="", flush=True)
@@ -184,7 +162,6 @@ def run_sonarqube_scan(target_dir, run_id):
             if response.status_code == 200:
                 measures = response.json().get('component', {}).get('measures', [])
                 
-                # A MÁGICA ESTÁ AQUI: Só sai do loop se as métricas não estiverem vazias!
                 if measures:
                     for m in measures:
                         metrics[m['metric']] = int(m['value'])
@@ -226,23 +203,8 @@ def wait_for_app(target_dir, report_dir):
     except: pass
     return None
 
-def create_zap_hook(report_dir):
-    hook_path = os.path.join(report_dir, "zap_hook.py")
-    hook_code = """
-def zap_started(zap, target):
-    print(f"\\n[ZAP HOOK] Importing OpenAPI Definitions from {target}/api-docs...")
-    try:
-        zap.openapi.import_url(f"{target}/api-docs")
-        print("[ZAP HOOK] OpenAPI import complete.\\n")
-    except Exception as e:
-        print(f"[ZAP HOOK] Failed to import OpenAPI: {e}\\n")
-"""
-    with open(hook_path, "w") as f:
-        f.write(hook_code)
-    return "zap_hook.py"
-
 def run_dast_zap(report_dir):
-    print(f"\n[DAST] Starting ZAP Full Scan (Ajax + OpenAPI + Auth)...", flush=True)
+    print(f"\n[DAST] Starting ZAP API Scan (OpenAPI + Auth)...", flush=True)
     
     unique_id = uuid.uuid4().hex[:8]
     email = f"zap_scanner_{unique_id}@juice-sh.op"
@@ -284,22 +246,19 @@ def run_dast_zap(report_dir):
     except: pass
     abs_report_dir = os.path.abspath(report_dir)
     
-    hook_filename = create_zap_hook(abs_report_dir)
-    
+    # Agora usamos o zap-api-scan.py, que consome o Swagger da API nativamente
     cmd = [
         "docker", "run", "--rm", 
         "--network", "host",
         "-u", "0",
         "-v", f"{abs_report_dir}:/zap/wrk/:rw",
         "ghcr.io/zaproxy/zaproxy:stable",
-        "zap-full-scan.py",
-        "-t", TARGET_URL,
+        "zap-api-scan.py",
+        "-t", f"{TARGET_URL}/api-docs",
+        "-f", "openapi",
         "-J", "zap_results.json",
         "-r", "zap_report.html",
-        "-j",
-        "-a", 
-        "-d",
-        "--hook", f"/zap/wrk/{hook_filename}"
+        "-d"
     ]
     
     if jwt_token:
@@ -314,7 +273,7 @@ def run_dast_zap(report_dir):
         ]
         cmd.extend(replacer_rules)
     
-    print(f"   ℹ️  Attacking Target with Spider & Auth (This will take a while)...")
+    print(f"   ℹ️  Attacking API endpoints (This will be much faster)...")
     try:
         subprocess.run(cmd, capture_output=True, text=True)
         json_path = os.path.join(report_dir, "zap_results.json")
@@ -326,7 +285,7 @@ def run_dast_zap(report_dir):
             alerts_list = data.get('site', [{}])[0].get('alerts', [])
             total_instances = 0
             
-            print(f"\n   📊 DETAILS ABOUT ALERTS (FULL SCAN):")
+            print(f"\n   📊 DETAILS ABOUT ALERTS (API SCAN):")
             print(f"   {'-'*60}")
             print(f"   {'ALERT NAME':<45} | {'RISK':<10} | {'QTD'}")
             print(f"   {'-'*60}")
@@ -341,7 +300,7 @@ def run_dast_zap(report_dir):
                     total_instances += count
             
             print(f"   {'-'*60}")
-            print(f"   ✅ TOTAL DAST: {total_instances}")
+            print(f"   ✅ TOTAL DAST (API): {total_instances}")
             return total_instances
 
         return 0
@@ -350,7 +309,6 @@ def run_dast_zap(report_dir):
         return 0
 
 def clean_previous_run_data(run_id, sec_csv_path, tests_csv_path, report_dir):
-    """Limpa diretórios de relatórios antigos e expurga linhas velhas dos CSVs para o mesmo run_id."""
     if os.path.exists(report_dir):
         shutil.rmtree(report_dir)
     os.makedirs(report_dir, exist_ok=True)
@@ -373,7 +331,6 @@ def run_experiment():
     
     run_dirs = []
     
-    # CRÍTICA RESOLVIDA: Adicionando a baseline incondicionalmente
     if os.path.exists(BASE_REPO):
         run_dirs.append(("baseline-original", BASE_REPO, "."))
     
@@ -407,7 +364,6 @@ def run_experiment():
     for run_id, target_dir, provider_dir in run_dirs:
         report_dir = os.path.join(REPORTS_BASE_DIR, run_id)
         
-        # Pula a baseline se os relatórios dela já existirem, garantindo que rode só "uma vez"
         if run_id == "baseline-original" and os.path.exists(report_dir) and os.listdir(report_dir):
             print(f"\n✅ Pulando {run_id}: Já analisado anteriormente.")
             continue
@@ -416,7 +372,6 @@ def run_experiment():
         print(f"🔬 EVALUATING REPOSITORY: {run_id}")
         print("="*50)
         
-        # CRÍTICA RESOLVIDA: Função para limpar lixo prévio e evitar duplicatas no CSV
         clean_previous_run_data(run_id, sec_csv_path, tests_csv_path, report_dir)
         
         metrics = {"integrity": False, "sast": -1, "dast": -1, "sonar": (-1, -1, -1, -1, -1)}

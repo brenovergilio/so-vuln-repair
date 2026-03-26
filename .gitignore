@@ -6,7 +6,7 @@ security_reports/
 venv/
 .env
 experiment_results/
-experiment_results copy/
+abstractive_contexts.json
 juice-shop/
 __pycache__/
 juice-shop/

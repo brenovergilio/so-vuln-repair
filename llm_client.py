@@ -1,4 +1,5 @@
 import os
+import sys
 import oci
 import time
 import requests
@@ -9,7 +10,8 @@ load_dotenv()
 class LLMClient:
     def __init__(self, provider="local"):
         """
-        provider: 'oci' para Oracle Cloud (70B) ou 'local' para rede local (8B)
+        provider: 'oci' para Oracle Cloud (70B), 'local' para rede local (8B),
+                  ou 'compressor' para o modelo dedicado à sumarização abstrativa (ex: 3B).
         """
         self.provider = provider.lower()
 
@@ -17,6 +19,8 @@ class LLMClient:
             self._init_oci()
         elif self.provider == "local":
             self._init_local()
+        elif self.provider == "compressor":
+            self._init_compressor()
         else:
             raise ValueError(f"❌ ERROR: Unknown provider '{provider}'. Use 'oci' or 'local'.")
 
@@ -46,8 +50,14 @@ class LLMClient:
         self.local_url = os.getenv("LOCAL_LLM_URL", "http://localhost:11434/v1/chat/completions")
         self.local_model = os.getenv("LOCAL_LLM_MODEL", "llama3.1")
         print(f"✅ Configurado para LLM Local -> {self.local_url} (Model: {self.local_model})")
+        
+    def _init_compressor(self):
+        # Configurações independentes para o modelo compressor (ex: Llama 3.2 3B)
+        self.compressor_url = os.getenv("COMPRESSOR_LLM_URL", "http://localhost:11434/v1/chat/completions")
+        self.compressor_model = os.getenv("COMPRESSOR_LLM_MODEL", "llama3.2")
+        print(f"✅ Configurado para LLM Compressor -> {self.compressor_url} (Model: {self.compressor_model})")
 
-    def generate_completion(self, system_prompt, user_prompt, temperature=None):        
+    def generate_completion(self, system_prompt, user_prompt, temperature=None, num_ctx = 8192):        
         if temperature is None:
             temp_env = os.getenv("TEMPERATURE", "0.0")
             temperature = float(temp_env) if temp_env else 0.0
@@ -55,7 +65,9 @@ class LLMClient:
         if self.provider == "oci":
             return self._generate_oci(system_prompt, user_prompt, temperature)
         elif self.provider == "local":
-            return self._generate_local(system_prompt, user_prompt, temperature)
+            return self._generate_local(system_prompt, user_prompt, temperature, num_ctx)
+        elif self.provider == "compressor":
+            return self._generate_compressor(system_prompt, user_prompt, temperature)
 
     def _generate_oci(self, system_prompt, user_prompt, temperature):
         # Simula o texto completo apenas para a nossa matemática de custo e tokens
@@ -110,18 +122,19 @@ class LLMClient:
                 print(f"❌ OCI Service Error: {e.message}")
                 return None
 
-    def _generate_local(self, system_prompt, user_prompt, temperature):
+    def _generate_local(self, system_prompt, user_prompt, temperature, num_ctx):
         # Formatação usando o padrão Universal OpenAI (compatível com Ollama/vLLM)
         payload = {
             "model": self.local_model,
+            "keep_alive": -1,  # Impede que o Ollama descarregue o modelo por inatividade
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            "temperature": temperature,
+            "stream": False,
             "options": {
-                "num_ctx": 4096,
-                "num_predict": 2048
+                "temperature": temperature,
+                "num_ctx": num_ctx,  # Mantém a janela de contexto ampla para o RAG + LSP
             }
         }
         
@@ -129,7 +142,50 @@ class LLMClient:
         simulated_full_text = system_prompt + user_prompt 
         
         try:
-            response = requests.post(self.local_url, json=payload, timeout=None)
+            # Envia a requisição com limite estrito de 15 minutos (900 segundos)
+            response = requests.post(self.local_url, json=payload, timeout=900)
+            response.raise_for_status()
+            
+            result = response.json()
+            generated_text = result.get("message", {}).get("content", "").strip()
+            
+            return {
+                "text": generated_text,
+                "input_chars": len(simulated_full_text),
+                "output_chars": len(generated_text)
+            }
+            
+        except requests.exceptions.Timeout:
+            error_msg = "\n❌ [ERRO FATAL] TIMEOUT: O Ollama não respondeu após 15 minutos. Encerrando o script imediatamente para proteger a integridade do experimento."
+            print(error_msg)
+            sys.exit(1)
+            
+        except requests.exceptions.RequestException as e:
+            error_msg = f"\n❌ [ERRO FATAL] FALHA NA API LOCAL: Houve uma quebra de comunicação com o servidor Ollama.\nDetalhes do erro: {e}\nEncerrando o script."
+            print(error_msg)
+            sys.exit(1)
+        
+        
+    def _generate_compressor(self, system_prompt, user_prompt, temperature):
+        # Utiliza o endpoint e modelo específicos do Compressor
+        payload = {
+            "model": self.compressor_model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            "keep_alive": -1,
+            "stream": False,
+            "options": {
+                "num_ctx": 24576, # Janela maior no compressor para ler todo o Qdrant bruto de uma vez
+                "temperature": temperature,
+            }
+        }
+        
+        simulated_full_text = system_prompt + user_prompt 
+        
+        try:
+            response = requests.post(self.compressor_url, json=payload, timeout=None)
             response.raise_for_status()
             
             result = response.json()
@@ -142,5 +198,5 @@ class LLMClient:
             }
             
         except requests.exceptions.RequestException as e:
-            print(f"❌ Local LLM API Error: {e}")
+            print(f"❌ Compressor LLM API Error: {e}")
             return None
