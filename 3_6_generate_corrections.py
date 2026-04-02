@@ -3,6 +3,9 @@ import time
 import sys
 import shutil
 import json
+import subprocess
+import requests
+import atexit
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
@@ -18,7 +21,7 @@ BASE_REPO = "./juice-shop"
 PROVIDER = os.getenv("PROVIDER", "local")
 OUTPUT_DIR = f"./experiment_results/{PROVIDER}/juice-shop"
 NUM_ITERATIONS = int(os.getenv("NUM_ITERATIONS", 3))
-TREATMENTS = ["llm-raw", "sosecure", "cvefixes"]
+TREATMENTS = ["llm-raw", "sosecure", "posecure-extractive", "posecure-abstractive", "cvefixes"]
 
 TARGET_EXTENSIONS, IGNORE_EXTENSIONS, TARGET_DIRS, IGNORE_DIRS, IGNORE_FILES = get_dirs_and_extensions()
 
@@ -26,6 +29,80 @@ COMPRESSED_JSON_PATH = "./compressed_contexts.json"
 RAW_JSON_PATH = "./raw_so_contexts.json"
 ABSTRACTIVE_JSON_PATH = "./abstractive_contexts.json"
 CVEFIXES_JSON_PATH = "./cvefixes_contexts.json"
+
+# =====================================================================
+# --- TYPE-EXTRACTOR SERVER ORCHESTRATION ---
+# =====================================================================
+node_server_process = None
+
+def cleanup_node_server():
+    """Garante que o servidor Node.js é desligado quando o script Python termina (com sucesso ou erro)."""
+    global node_server_process
+    if node_server_process:
+        print("\n🧹 [TEARDOWN] Desligando o Type-Extractor Server (Porta 3001)...")
+        node_server_process.terminate()
+        try:
+            node_server_process.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            node_server_process.kill()
+        # Limpeza agressiva por precaução
+        subprocess.run(["fuser", "-k", "-s", "9", "3001/tcp"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print("   ✅ Servidor Node.js encerrado.")
+
+def start_type_extractor_server():
+    """Levanta o servidor Node.js se algum tratamento precisar de RAG de código."""
+    global node_server_process
+    print("\n⚙️  [SETUP] Verificando necessidade do Type-Extractor Server...")
+    
+    needs_server = any(t in TREATMENTS for t in ["posecure-abstractive", "posecure-extractive", "cvefixes"])
+    if not needs_server:
+        print("   ⏩ Tratamentos atuais não exigem contexto estrutural. Servidor Node ignorado.")
+        return
+
+    extractor_dir = "./type-extractor"
+    if not os.path.exists(extractor_dir):
+        print(f"❌ ERRO FATAL: O diretório '{extractor_dir}' não foi encontrado.")
+        sys.exit(1)
+
+    print("   🚀 Iniciando o Bi-directional RAG Extractor (Node.js) em background...")
+    
+    # Mata qualquer processo fantasma que possa ter ficado na porta 3001 de execuções anteriores
+    subprocess.run(["fuser", "-k", "-s", "9", "3001/tcp"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    
+    # IMPORTANTE: Substitua "server.js" pelo nome real do arquivo Node.js que contém o express
+    node_server_process = subprocess.Popen(
+        ["node", "server.js"], 
+        cwd=extractor_dir,
+        stdout=subprocess.DEVNULL, 
+        stderr=subprocess.DEVNULL
+    )
+
+    # Health Check para garantir que o Express iniciou
+    print("   ⏳ Aguardando servidor Node.js responder na porta 3001...")
+    server_ready = False
+    for _ in range(15): # Tenta durante 15 segundos
+        try:
+            # Fazemos um GET. O Express vai retornar 404 (pois só temos rota POST), 
+            # mas retornar 404 significa que o servidor está online e vivo!
+            resp = requests.get("http://localhost:3001", timeout=1)
+            server_ready = True
+            break
+        except requests.exceptions.ConnectionError:
+            time.sleep(1)
+            print(".", end="", flush=True)
+            
+    if server_ready:
+        print("\n   ✅ Type-Extractor Server Online e pronto para uso!")
+    else:
+        print("\n❌ ERRO FATAL: O servidor Node.js não respondeu a tempo. Abortando.")
+        cleanup_node_server()
+        sys.exit(1)
+
+# Registra a função de limpeza para rodar na saída do script
+atexit.register(cleanup_node_server)
+
+# Inicia a orquestração do servidor antes de carregar os JSONs
+start_type_extractor_server()
 
 # Variáveis separadas para carregar os conteúdos
 compressed_contexts = {}

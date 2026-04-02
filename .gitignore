@@ -2,6 +2,7 @@ data-filtering-scripts/so_*
 data-filtering-scripts/stackoverflow.com.7z
 *.json*
 *.csv
+type-extractor/node_modules/
 qdrant_storage/
 security_reports/
 venv/
