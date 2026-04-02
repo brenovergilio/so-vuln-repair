@@ -183,39 +183,60 @@ def get_ts_tree_sitter_language_and_parser():
   
   return language, parser
 
-def retrieve_from_qdrant(qdrant_client, sparse_model, clean_func_text, limit = 5):
-  COLLECTION_NAME = "sosecure_bm25_js_ts"
-  try:
-    sparse_generator = sparse_model.embed([clean_func_text])
-    sparse_vector_obj = list(sparse_generator)[0]
-    sparse_vector = models.SparseVector(
-        indices=sparse_vector_obj.indices.tolist(),
-        values=sparse_vector_obj.values.tolist()
-    )
-                            
-    results = qdrant_client.query_points(
-        collection_name=COLLECTION_NAME,
-        query=sparse_vector,
-        using="bm25",
-        limit=limit, 
-    )
-                            
-    context_blocks = []
-    for hit in results.points:
-        p = hit.payload or {}
-        answer_body = p.get('body', '')
-        comments = p.get('comments', [])
+from qdrant_client import models
+
+def retrieve_from_qdrant(qdrant_client, sparse_model, clean_func_text, limit=5, collection_name="sosecure_bm25_js_ts"):
+    try:
+        # 1. Geração do vetor BM25
+        sparse_generator = sparse_model.embed([clean_func_text])
+        sparse_vector_obj = list(sparse_generator)[0]
+        sparse_vector = models.SparseVector(
+            indices=sparse_vector_obj.indices.tolist(),
+            values=sparse_vector_obj.values.tolist()
+        )
+                                
+        # 2. Busca no Qdrant
+        results = qdrant_client.query_points(
+            collection_name=collection_name,
+            query=sparse_vector,
+            using="bm25",
+            limit=limit, 
+        )
+                                
+        context_blocks = []
+        for hit in results.points:
+            p = hit.payload or {}
+            
+            # 3. Roteamento de Formatação (CVEfixes vs SOSecure)
+            if "cvefixes" in collection_name.lower():
+                # Formatação estrita para Code-to-Code RAG
+                vuln_code = str(p.get('vulnerable_code', '')).strip()
+                fixed_code = str(p.get('fixed_code', '')).strip()
+                cve_id = p.get('cve_id', 'Unknown')
+                cwe_id = p.get('cwe_id', 'Unknown')
+                
+                block = f"--- Related Vulnerability Pattern ({cve_id} | CWE: {cwe_id}) ---\n"
+                block += f"[VULNERABLE CODE]\n{vuln_code}\n\n"
+                block += f"[SECURE FIX]\n{fixed_code}"
+                context_blocks.append(block)
+                
+            else:
+                # Formatação clássica para o SOSecure (Stack Overflow)
+                answer_body = p.get('body', '')
+                comments = p.get('comments', [])
+                
+                block = f"--- Post Answer ---\n{answer_body}\n\nComments:\n"
+                block += "\n".join([f"- {c}" for c in comments])
+                context_blocks.append(block)
         
-        block = f"--- Post Answer ---\n{answer_body}\n\nComments:\n"
-        block += "\n".join([f"- {c}" for c in comments])
-        context_blocks.append(block)
-    
-    if(context_blocks):        
-      return "\n\n=======================\n\n".join(context_blocks)
-    return ""
-  except Exception as e:
-      print(f"   ⚠️ RAG Retrieval failed: {e}")
-      return ""
+        # 4. Junção dos blocos recuperados
+        if context_blocks:        
+            return "\n\n=======================\n\n".join(context_blocks)
+        return ""
+        
+    except Exception as e:
+        print(f"   ⚠️ RAG Retrieval failed: {e}")
+        return ""
 
 def get_func_id(func_text: str) -> str:
     """Gera um Hash determinístico da função para ser usado como chave no JSON."""

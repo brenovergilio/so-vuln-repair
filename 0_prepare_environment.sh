@@ -29,26 +29,12 @@ install_ubuntu() {
 
     sudo apt install -y nodejs psmisc lsof \
         python3.11 python3.11-venv python3.11-dev \
-        build-essential
-}
-
-install_fedora() {
-    echo "📦 Starting installation via DNF (Fedora/RHEL)..."
-
-    curl -fsSL https://rpm.nodesource.com/setup_24.x | sudo bash -
-    
-    echo "🔧 Installing Python 3.11 and build tools..."
-    sudo dnf install -y nodejs psmisc lsof git \
-        python3.11 python3.11-devel \
-        gcc gcc-c++ make p7zip p7zip-plugins
+        build-essential \
 }
 
 case $DISTRO in
     "ubuntu"|"debian"|"pop"|"linuxmint"|"kali")
         install_ubuntu
-        ;;
-    "fedora"|"rhel"|"centos"|"almalinux"|"rocky")
-        install_fedora
         ;;
     *)
         echo "❌ Distro is not supported: $DISTRO"

@@ -7,6 +7,7 @@ import re
 import uuid
 import sys
 import shutil
+import csv
 import codeql_scanner
 from dotenv import load_dotenv
 
@@ -17,7 +18,6 @@ load_dotenv()
 BASE_REPO = "./juice-shop"
 RESULTS_DIR_LOCAL = "./experiment_results/local/juice-shop"
 RESULTS_DIR_OCI = "./experiment_results/oci/juice-shop"
-REPORTS_BASE_DIR = "./experiment_results/reports"
 TARGET_URL = "http://localhost:3000"
 APP_STARTUP_TIMEOUT = 180 
 
@@ -26,6 +26,7 @@ if PROVIDER not in ["local", "oci"]:
     print(f"❌ ERRO FATAL: PROVIDER inválido ('{PROVIDER}'). Use apenas 'local' ou 'oci'.")
     sys.exit(1)
 
+REPORTS_BASE_DIR = f"./experiment_results/{PROVIDER}/reports"
 SONAR_LOGIN = os.getenv("SONAR_LOGIN", "admin")
 SONAR_PASS = os.getenv("SONAR_PASS", "admin")
 
@@ -108,11 +109,12 @@ def check_deep_integrity(target_dir, run_id, provider_dir):
 def inject_sonar_properties(target_dir, run_id):
     print(f"   📝 Injecting sonar-project.properties (API Focused)...", end=" ", flush=True)
     properties_path = os.path.join(target_dir, "sonar-project.properties")
-    # Exclui o frontend inteiro das analises do SonarQube
+    
+    # A MÁGICA: Em vez de excluir o frontend, dizemos ao Sonar para ler APENAS routes e models.
     content = f"""sonar.projectKey={run_id}
 sonar.projectName=Juice Shop API - {run_id}
-sonar.sources=.
-sonar.exclusions=node_modules/**,frontend/**,data/**,test/**,e2e/**,build/**,dist/**,**/*.spec.ts,reports/**
+sonar.sources=routes,models
+sonar.exclusions=**/*.spec.ts,**/*.test.ts
 sonar.language=ts
 sonar.javascript.lcov.reportPaths=build/reports/coverage/server-tests/lcov.info
 """
@@ -125,8 +127,49 @@ sonar.javascript.lcov.reportPaths=build/reports/coverage/server-tests/lcov.info
 
 def run_sast_codeQL(target_dir, report_dir):
     print(f"\n[SAST] Starting CodeQL...", flush=True)
-    scan_result = codeql_scanner.run_scan(target_dir, report_dir)
-    return scan_result.get("total", -1)
+    
+    # 1. Roda o scan normal do CodeQL
+    codeql_scanner.run_scan(target_dir, report_dir)
+    
+    # 2. Abre o relatório bruto gerado
+    csv_path = os.path.join(report_dir, "result.csv")
+    if not os.path.exists(csv_path):
+        print(" ❌ CodeQL result.csv not found.")
+        return -1
+        
+    valid_vulnerabilities = 0
+    filtered_rows = []
+    
+    # Os prefixos das pastas que queremos auditar
+    target_prefixes = ("/routes", "/models", "routes", "models")
+    
+    try:
+        with open(csv_path, "r", encoding="utf-8") as f:
+            reader = csv.reader(f)
+            header = next(reader, None)
+            if header:
+                filtered_rows.append(header)
+                
+            for row in reader:
+                if len(row) > 4:
+                    # A coluna 4 do CodeQL (índice 4) contém o caminho do ficheiro (ex: /routes/login.ts)
+                    file_path = row[4] 
+                    
+                    if file_path.startswith(target_prefixes):
+                        filtered_rows.append(row)
+                        valid_vulnerabilities += 1
+                        
+        # 3. Reescreve o CSV apenas com as falhas das pastas alvo
+        with open(csv_path, "w", encoding="utf-8", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerows(filtered_rows)
+            
+        print(f"   ✅ SAST Targeted Done. Backend vulnerabilities: {valid_vulnerabilities}")
+        return valid_vulnerabilities
+        
+    except Exception as e:
+        print(f" ❌ Error filtering CodeQL results: {e}")
+        return -1
 
 def run_sonarqube_scan(target_dir, run_id):
     print(f"\n[CODE QUALITY] Starting SonarQube Scan for {run_id}...", flush=True)
@@ -191,8 +234,9 @@ def wait_for_app(target_dir, report_dir):
     start_time = time.time()
     while time.time() - start_time < APP_STARTUP_TIMEOUT:
         try:
-            if requests.get(TARGET_URL).status_code == 200:
-                print("✅ Juice Shop Online!")
+            health_url = f"{TARGET_URL}/rest/admin/application-version"
+            if requests.get(health_url).status_code == 200:
+                print("✅ Juice Shop API Online!")
                 return server_process
         except: pass
         time.sleep(2)

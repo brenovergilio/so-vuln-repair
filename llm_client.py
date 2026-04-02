@@ -46,14 +46,14 @@ class LLMClient:
             raise e
 
     def _init_local(self):
-        # Configurações para a sua máquina na rede local
-        self.local_url = os.getenv("LOCAL_LLM_URL", "http://localhost:11434/v1/chat/completions")
+        # Mude de /v1/chat/completions para /api/chat
+        self.local_url = os.getenv("LOCAL_LLM_URL", "http://localhost:11434/api/chat")
         self.local_model = os.getenv("LOCAL_LLM_MODEL", "llama3.1")
         print(f"✅ Configurado para LLM Local -> {self.local_url} (Model: {self.local_model})")
         
     def _init_compressor(self):
-        # Configurações independentes para o modelo compressor (ex: Llama 3.2 3B)
-        self.compressor_url = os.getenv("COMPRESSOR_LLM_URL", "http://localhost:11434/v1/chat/completions")
+        # Mude de /v1/chat/completions para /api/chat
+        self.compressor_url = os.getenv("COMPRESSOR_LLM_URL", "http://localhost:11434/api/chat")
         self.compressor_model = os.getenv("COMPRESSOR_LLM_MODEL", "llama3.2")
         print(f"✅ Configurado para LLM Compressor -> {self.compressor_url} (Model: {self.compressor_model})")
 
@@ -189,7 +189,8 @@ class LLMClient:
             response.raise_for_status()
             
             result = response.json()
-            generated_text = result["choices"][0]["message"]["content"].strip()
+            # MUDAR AQUI: De result["choices"][0]["message"]["content"] para o formato nativo:
+            generated_text = result.get("message", {}).get("content", "").strip()
             
             return {
                 "text": generated_text,

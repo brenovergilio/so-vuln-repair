@@ -2,9 +2,7 @@ import os
 import time
 import sys
 import shutil
-import traceback
 import json
-import hashlib
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
@@ -20,18 +18,20 @@ BASE_REPO = "./juice-shop"
 PROVIDER = os.getenv("PROVIDER", "local")
 OUTPUT_DIR = f"./experiment_results/{PROVIDER}/juice-shop"
 NUM_ITERATIONS = int(os.getenv("NUM_ITERATIONS", 3))
-TREATMENTS = ["llm-raw", "sosecure", "posecure-extractive", "posecure-abstractive"]
+TREATMENTS = ["llm-raw", "sosecure", "cvefixes"]
 
 TARGET_EXTENSIONS, IGNORE_EXTENSIONS, TARGET_DIRS, IGNORE_DIRS, IGNORE_FILES = get_dirs_and_extensions()
 
 COMPRESSED_JSON_PATH = "./compressed_contexts.json"
 RAW_JSON_PATH = "./raw_so_contexts.json"
 ABSTRACTIVE_JSON_PATH = "./abstractive_contexts.json"
+CVEFIXES_JSON_PATH = "./cvefixes_contexts.json"
 
 # Variáveis separadas para carregar os conteúdos
 compressed_contexts = {}
 raw_contexts = {}
 abstractive_contexts = {}
+cvefixes_contexts = {}
 
 # 1. Verifica e carrega para o tratamento COM compressão
 if "posecure-extractive" in TREATMENTS:
@@ -61,6 +61,15 @@ if "posecure-abstractive" in TREATMENTS:
     else:
         print(f"❌ ERRO FATAL: O tratamento 'posecure' foi selecionado, mas o arquivo {ABSTRACTIVE_JSON_PATH} não existe. Abortando.")
         sys.exit(1)
+        
+if "cvefixes" in TREATMENTS:
+    if os.path.exists(ABSTRACTIVE_JSON_PATH):
+        print(f"📦 Carregando RAG CVEFixes de: {CVEFIXES_JSON_PATH}")
+        with open(CVEFIXES_JSON_PATH, "r", encoding="utf-8") as f:
+            cvefixes_contexts = json.load(f)
+    else:
+        print(f"❌ ERRO FATAL: O tratamento 'cvefixes' foi selecionado, mas o arquivo {CVEFIXES_JSON_PATH} não existe. Abortando.")
+        sys.exit(1)
 
 # =====================================================================
 # --- SOSECURE REPLICATION PROMPTS ---
@@ -78,16 +87,6 @@ def get_prompt_raw(query):
 - If no security issues are found, output "No security issues found".
 - KEEP THE EXACT SAME FUNCTION SIGNATURE (input arguments, return type and name).
 - RETURN ONLY THE CODE. No markdown, no explanation.
-
-**STRICT COMPILATION & FRAMEWORK RULES (CRITICAL):**
-1. NO NEW IMPORTS: You are modifying an isolated function block. DO NOT invoke external libraries (like DOMPurify, Joi, xss, etc.) or RxJS operators (`of`, `throwError`) unless they are ALREADY defined in the [LIBRARY SIGNATURES]. 
-2. CLASS METHOD PRESERVATION: If the provided code is a class method (e.g., `methodName(...) {{ ... }}`), return it EXACTLY as a class method. DO NOT prepend the `function` keyword or convert it to an arrow function property.
-3. TYPESCRIPT STRICT ERRORS: In `catch (error)` blocks, assume `error` is of type `unknown`. You MUST typecast it (e.g., `if (error instanceof Error) {{ ... }}`) before accessing properties like `.message`.
-4. NO MODERN ES2022 ERROR CAUSES: DO NOT use the {{ cause: error }} object when instantiating Errors (e.g., do not write `new Error(msg, {{ cause: err }})`). Strictly use the standard `new Error(msg)`.
-5. STRICT TYPE PRESERVATION: Do not change the original nullability of variables or return types. Do not reassign variables declared with `const`.
-6. ANGULAR SANITIZER AWARENESS: If you use Angular's `this.sanitizer.sanitize()`, it strictly requires TWO arguments (SecurityContext and the value). If context is unavailable, use standard JS regex/type-checking to prevent XSS.
-7. ENVIRONMENT ISOLATION: Do not mix browser modules with Node.js modules. If the code uses Angular injections (like `this.router`), DO NOT use Node.js native modules like `crypto.createHash()`.
-8. MUST MATCH THE TYPE CONTEXT: When calling external libraries or local modules, strictly use the arguments and types defined in the provided Type Context.
 """
 
 def get_prompt_rag(query, context):
@@ -108,16 +107,6 @@ Does this code have any security vulnerabilities? Below is a related StackOverfl
 - KEEP THE EXACT SAME FUNCTION SIGNATURE (input arguments, return type and name).
 - RETURN ONLY THE CODE. No markdown, no explanation.
 - It is imperative that the new code should not have any CWE or CVE security errors.
-
-**STRICT COMPILATION & FRAMEWORK RULES (CRITICAL):**
-1. NO NEW IMPORTS: You are modifying an isolated function block. DO NOT invoke external libraries (like DOMPurify, Joi, xss, etc.) or RxJS operators (`of`, `throwError`) unless they are ALREADY defined in the [LIBRARY SIGNATURES]. 
-2. CLASS METHOD PRESERVATION: If the provided code is a class method (e.g., `methodName(...) {{ ... }}`), return it EXACTLY as a class method. DO NOT prepend the `function` keyword or convert it to an arrow function property.
-3. TYPESCRIPT STRICT ERRORS: In `catch (error)` blocks, assume `error` is of type `unknown`. You MUST typecast it (e.g., `if (error instanceof Error) {{ ... }}`) before accessing properties like `.message`.
-4. NO MODERN ES2022 ERROR CAUSES: DO NOT use the {{ cause: error }} object when instantiating Errors (e.g., do not write `new Error(msg, {{ cause: err }})`). Strictly use the standard `new Error(msg)`.
-5. STRICT TYPE PRESERVATION: Do not change the original nullability of variables or return types. Do not reassign variables declared with `const`.
-6. ANGULAR SANITIZER AWARENESS: If you use Angular's `this.sanitizer.sanitize()`, it strictly requires TWO arguments (SecurityContext and the value). If context is unavailable, use standard JS regex/type-checking to prevent XSS.
-7. ENVIRONMENT ISOLATION: Do not mix browser modules with Node.js modules. If the code uses Angular injections (like `this.router`), DO NOT use Node.js native modules like `crypto.createHash()`.
-8. MUST MATCH THE TYPE CONTEXT: When calling external libraries or local modules, strictly use the arguments and types defined in the provided Type Context.
 """
 
 def get_prompt_posecure(query, context, type_signatures=""):
@@ -142,6 +131,56 @@ STRICTLY ADHERE to these definitions to prevent compilation errors. Do not hallu
 """
 
     # Prompt Final POSecure
+    return f"""Given the following code:
+
+{query}
+
+Does this code have any security vulnerabilities? 
+{context_block}
+{type_block}
+**Instructions:**
+- Review the code for any security flaws.
+- If the code has security issues, modify the code to follow best security practices while ensuring the original functionality and logic are maintained.
+- If no security issues are found, output "No security issues found".
+- Ensure that the fixes do not alter the original intent of the code.
+- KEEP THE EXACT SAME FUNCTION SIGNATURE (input arguments, return type and name).
+- MUST MATCH THE TYPE CONTEXT: When calling external libraries or local modules, strictly use the arguments and types defined in the provided Type Context.
+- RETURN ONLY THE CODE. No markdown, no explanation.
+- It is imperative that the new code should not have any CWE or CVE security errors.
+
+**STRICT COMPILATION & FRAMEWORK RULES (CRITICAL):**
+1. NO NEW IMPORTS: You are modifying an isolated function block. DO NOT invoke external libraries (like DOMPurify, Joi, xss, etc.) or RxJS operators (`of`, `throwError`) unless they are ALREADY defined in the [LIBRARY SIGNATURES]. 
+2. CLASS METHOD PRESERVATION: If the provided code is a class method (e.g., `methodName(...) {{ ... }}`), return it EXACTLY as a class method. DO NOT prepend the `function` keyword or convert it to an arrow function property.
+3. TYPESCRIPT STRICT ERRORS: In `catch (error)` blocks, assume `error` is of type `unknown`. You MUST typecast it (e.g., `if (error instanceof Error) {{ ... }}`) before accessing properties like `.message`.
+4. NO MODERN ES2022 ERROR CAUSES: DO NOT use the {{ cause: error }} object when instantiating Errors (e.g., do not write `new Error(msg, {{ cause: err }})`). Strictly use the standard `new Error(msg)`.
+5. STRICT TYPE PRESERVATION: Do not change the original nullability of variables or return types. Do not reassign variables declared with `const`.
+6. ANGULAR SANITIZER AWARENESS: If you use Angular's `this.sanitizer.sanitize()`, it strictly requires TWO arguments (SecurityContext and the value). If context is unavailable, use standard JS regex/type-checking to prevent XSS.
+7. ENVIRONMENT ISOLATION: Do not mix browser modules with Node.js modules. If the code uses Angular injections (like `this.router`), DO NOT use Node.js native modules like `crypto.createHash()`.
+8. MUST MATCH THE TYPE CONTEXT: When calling external libraries or local modules, strictly use the arguments and types defined in the provided Type Context.
+"""
+
+def get_prompt_cvefixes(query, context, type_signatures=""):
+    # Bloco estrutural (AST / LSP)
+    type_block = ""
+    if type_signatures and type_signatures.strip():
+        type_block = f"""
+Below are the EXACT type signatures and contracts for the libraries and local modules imported in this file. 
+STRICTLY ADHERE to these definitions to prevent compilation errors. Do not hallucinate parameters or methods that do not exist in these signatures:
+---
+{type_signatures}
+---
+"""
+
+    # Bloco semântico (CVEfixes / Qdrant)
+    context_block = ""
+    if context and context.strip():
+        context_block = f"""Below are related real-world vulnerability patterns (CVEs) and their secure fixes that may be helpful as a reference for your correction:
+---
+{context}
+---
+"""
+
+    # Prompt Final CVEfixes
     return f"""Given the following code:
 
 {query}
@@ -260,6 +299,18 @@ def process_file(file_path, treatment, run_id, dest_path):
                     
                     # Usa o construtor de prompt forte do POSecure
                     user_content = get_prompt_posecure(clean_func_text, final_rag_context, type_signatures)
+                    
+                elif treatment == "cvefixes": # (Este é o cvefixes)
+                    cvefixes_examples = cvefixes_contexts.get(rel_path_key, {}).get(func_id, "")
+                    final_rag_context = ""
+                    if cvefixes_examples: 
+                        final_rag_context = f"[KNOWN VULNERABILITY FIXES]\n{cvefixes_examples}"
+                    
+                    rel_path_to_original = os.path.join(BASE_REPO, rel_path_key)
+                    original_repo_file_path = os.path.abspath(rel_path_to_original)
+                    type_signatures = get_type_aware_context(original_repo_file_path, clean_func_text)
+                    
+                    user_content = get_prompt_cvefixes(clean_func_text, final_rag_context, type_signatures)
 
             if not user_content: continue
 
