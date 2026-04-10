@@ -16,7 +16,7 @@ BASE_REPO = "./juice-shop"
 PROVIDER = os.getenv("PROVIDER", "local")
 
 # Caminho alterado para a raiz do projeto, conforme solicitado.
-PRECOMPUTED_JSON_PATH = "./compressed_contexts.json"
+PRECOMPUTED_JSON_PATH = "./extractive_contexts.json"
 
 TARGET_EXTENSIONS, IGNORE_EXTENSIONS, TARGET_DIRS, IGNORE_DIRS, IGNORE_FILES = get_dirs_and_extensions()
 

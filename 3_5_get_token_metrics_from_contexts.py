@@ -6,7 +6,7 @@ from utils import get_llama_tokenizer, count_llama_tokens
 # --- CONFIGURATION ---
 JSON_FILES = [
     "raw_so_contexts.json",
-    "compressed_contexts.json",
+    "extractive_contexts.json",
     "abstractive_contexts.json",
     "cvefixes_contexts.json",
 ]

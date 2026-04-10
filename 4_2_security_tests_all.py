@@ -110,7 +110,6 @@ def inject_sonar_properties(target_dir, run_id):
     print(f"   📝 Injecting sonar-project.properties (API Focused)...", end=" ", flush=True)
     properties_path = os.path.join(target_dir, "sonar-project.properties")
     
-    # A MÁGICA: Em vez de excluir o frontend, dizemos ao Sonar para ler APENAS routes e models.
     content = f"""sonar.projectKey={run_id}
 sonar.projectName=Juice Shop API - {run_id}
 sonar.sources=routes,models
@@ -128,10 +127,8 @@ sonar.javascript.lcov.reportPaths=build/reports/coverage/server-tests/lcov.info
 def run_sast_codeQL(target_dir, report_dir):
     print(f"\n[SAST] Starting CodeQL...", flush=True)
     
-    # 1. Roda o scan normal do CodeQL
     codeql_scanner.run_scan(target_dir, report_dir)
     
-    # 2. Abre o relatório bruto gerado
     csv_path = os.path.join(report_dir, "result.csv")
     if not os.path.exists(csv_path):
         print(" ❌ CodeQL result.csv not found.")
@@ -140,7 +137,6 @@ def run_sast_codeQL(target_dir, report_dir):
     valid_vulnerabilities = 0
     filtered_rows = []
     
-    # Os prefixos das pastas que queremos auditar
     target_prefixes = ("/routes", "/models", "routes", "models")
     
     try:
@@ -152,14 +148,12 @@ def run_sast_codeQL(target_dir, report_dir):
                 
             for row in reader:
                 if len(row) > 4:
-                    # A coluna 4 do CodeQL (índice 4) contém o caminho do ficheiro (ex: /routes/login.ts)
                     file_path = row[4] 
                     
                     if file_path.startswith(target_prefixes):
                         filtered_rows.append(row)
                         valid_vulnerabilities += 1
                         
-        # 3. Reescreve o CSV apenas com as falhas das pastas alvo
         with open(csv_path, "w", encoding="utf-8", newline="") as f:
             writer = csv.writer(f)
             writer.writerows(filtered_rows)
@@ -290,7 +284,6 @@ def run_dast_zap(report_dir):
     except: pass
     abs_report_dir = os.path.abspath(report_dir)
     
-    # Agora usamos o zap-api-scan.py, que consome o Swagger da API nativamente
     cmd = [
         "docker", "run", "--rm", 
         "--network", "host",
@@ -366,12 +359,31 @@ def clean_previous_run_data(run_id, sec_csv_path, tests_csv_path, report_dir):
                     if not line.startswith(f"{run_id},"):
                         f.write(line)
 
+def rebuild_native_addons():
+    """
+    Reconstrói os addons nativos (sqlite3, etc.) para a versão atual do Node.js.
+    Precisa rodar apenas uma vez pois o node_modules é compartilhado via symlink.
+    """
+    print(f"\n[SETUP] Rebuilding native addons for current Node.js version...")
+    ok, _ = run_command(
+        ["npm", "rebuild", "sqlite3"],
+        "Rebuild sqlite3",
+        cwd=BASE_REPO,
+        ignore_error=False
+    )
+    if not ok:
+        print("❌ FATAL: Falha ao rebuildar sqlite3. DAST não funcionará.")
+        sys.exit(1)
+    print("   ✅ Native addons rebuilt successfully.")
+
 def run_experiment():
     print("="*60)
     print(f"🛡️ BATCH SECURITY EVALUATION (Provider: {PROVIDER.upper()})")
     print("="*60)
     
     os.makedirs(REPORTS_BASE_DIR, exist_ok=True)
+    
+    rebuild_native_addons()
     
     run_dirs = []
     
@@ -428,14 +440,46 @@ def run_experiment():
 
         metrics["sast"] = run_sast_codeQL(target_dir, report_dir)
         metrics["sonar"] = run_sonarqube_scan(target_dir, run_id)
-        
-        app_process = wait_for_app(target_dir, report_dir)
-        if app_process:
-            metrics["dast"] = run_dast_zap(report_dir)
-            app_process.kill()
-            force_kill_port(3000)
+
+        # FIX: build explícito antes do DAST — o symlink de node_modules não copia
+        # o build/, e o npm start depende de node build/app para subir o servidor.
+        # check_deep_integrity já validou a compilação; aqui geramos o build/ de fato.
+        print(f"\n[BUILD] Compiling patched code for DAST ({run_id})...")
+        build_ok, _ = run_command(
+            ["npm", "run", "build:server"], "Build Server (pre-DAST)", cwd=target_dir,
+            ignore_error=False,
+            error_log_path=os.path.join(report_dir, "build_predast_error.log")
+        )
+
+        if not build_ok:
+            print(f"⚠️ Build failed for {run_id}. Skipping DAST.")
+            metrics["dast"] = -1
         else:
-            print(f"⚠️ App failed to start for {run_id} due to LLM breaking the code. Skipping DAST.")
+            app_process = wait_for_app(target_dir, report_dir)
+            if app_process:
+                metrics["dast"] = run_dast_zap(report_dir)
+                app_process.kill()
+                force_kill_port(3000)
+            else:
+                print(f"⚠️ App failed to start for {run_id}. Skipping DAST.")
+                metrics["dast"] = -1
+
+                print(f"   🔍 EXTRAINDO MOTIVO DO CRASH (Últimas 20 linhas do log):")
+                log_path = os.path.join(report_dir, "app_runtime.log")
+                if os.path.exists(log_path):
+                    try:
+                        with open(log_path, "r", encoding="utf-8") as log_file:
+                            lines = log_file.readlines()
+                            if lines:
+                                print("   " + "-"*55)
+                                print("".join(lines[-20:]).strip())
+                                print("\n   " + "-"*55)
+                            else:
+                                print("   ⚠️ O arquivo app_runtime.log está vazio.")
+                    except Exception as e:
+                        print(f"   ❌ Erro ao ler o log: {e}")
+                else:
+                    print(f"   ⚠️ O arquivo {log_path} não foi encontrado.")
 
         sb, sv, scs, sh, sq = metrics["sonar"]
         with open(sec_csv_path, "a") as f:

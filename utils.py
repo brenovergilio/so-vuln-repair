@@ -6,8 +6,9 @@ from qdrant_client import QdrantClient, models
 from fastembed import SparseTextEmbedding
 import hashlib
 import requests
-import os
+import subprocess
 import sys
+import os
 
 def get_llama_tokenizer():
   print("⏳ Loading Llama 3.1 Tokenizer...")
@@ -34,22 +35,89 @@ def get_dirs_and_extensions():
         {"routes", "models"}, # TARGET_DIRS
         {"node_modules", ".git", "test", "dist", ".angular", "e2e", "vagrant", "assets", "environments", "frontend"}, # IGNORE_DIRS
         {"verify.ts", "vulnCodeFixes.ts", "vulnCodeSnippet.ts"}] # IGNORE_FILES
-  
+# FIX: flag de controle para emitir o aviso de tokenizer nulo apenas uma vez,
+#      evitando spam no log e tornando a falha visível sem interromper a execução
+_tokenizer_warning_emitted = False
+ 
 def count_llama_tokens(text: str, tokenizer) -> int:
-    if not text or tokenizer is None:
+    global _tokenizer_warning_emitted
+    if not text:
+        return 0
+    # FIX: tokenizer None retornava 0 silenciosamente, corrompendo todas as métricas
+    if tokenizer is None:
+        if not _tokenizer_warning_emitted:
+            print("⚠️  AVISO: tokenizer é None — contagens de tokens serão 0. Métricas de custo estarão incorretas.")
+            _tokenizer_warning_emitted = True
         return 0
     return len(tokenizer.encode(text))
   
-def count_syntax_errors(tree, language, parser):
-    query = Query(language, "(ERROR) @err")
-    cursor = QueryCursor(query)
-    captures = cursor.captures(tree.root_node)
-    return len(captures.get("err", []))
+def count_syntax_errors(tree, language=None, parser=None):
+    """
+    Varre a árvore manualmente para capturar tanto nós de ERRO explícito
+    quanto nós AUSENTES (ex: chaves '}' ou ponto e vírgula ';' esquecidos pelo LLM).
+    """
+    error_count = 0
+    
+    def walk(node):
+        nonlocal error_count
+        # Contabiliza se for um erro de sintaxe ou um token esquecido (missing)
+        if node.type == 'ERROR' or node.is_missing:
+            error_count += 1
+            
+        # Continua a busca recursiva em todos os filhos
+        for child in node.children:
+            walk(child)
+            
+    walk(tree.root_node)
+    return error_count
+
+def run_tsc_check(dest_path):
+    """
+    Roda o TypeScript Compiler (tsc) na raiz do projeto e recolhe TODOS os erros
+    de compilação gerados, garantindo que o patch não quebrou outros arquivos em cascata.
+    """
+    tsc_bin = os.path.join("node_modules", "typescript", "bin", "tsc")
+    try:
+        result = subprocess.run(
+            ["node", tsc_bin, "--noEmit"],
+            cwd=dest_path,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True
+        )
+        output = result.stdout
+        return_code = result.returncode
+    except FileNotFoundError:
+        # FIX: 'npx' não encontrado retornava ([], 0), aceitando todos os patches
+        #      sem nenhuma validação real. Agora propaga o erro explicitamente.
+        msg = "FATAL: 'npx' não encontrado no PATH. Verifique a instalação do Node.js."
+        print(f"❌ {msg}")
+        return [msg], 1
+    except Exception as e:
+        # FIX: outros erros de subprocess também geravam output sem "error TS",
+        #      fazendo run_tsc_check retornar 0 erros incorretamente
+        msg = f"FATAL: Falha ao executar tsc: {e}"
+        print(f"❌ {msg}")
+        return [msg], 1
+ 
+    global_errors = []
+    for line in output.splitlines():
+        if "error TS" in line:
+            global_errors.append(line.strip())
+ 
+    # FIX: tsc pode falhar por razões não-TS (ex: tsconfig.json ausente) sem gerar
+    #      linhas "error TS" — nesse caso o returncode != 0 é o único sinal de falha
+    if return_code != 0 and not global_errors:
+        fallback_msg = f"tsc encerrou com código {return_code} mas nenhum erro TS foi parseado. Output: {output.strip()[:300]}"
+        print(f"⚠️  {fallback_msg}")
+        return [fallback_msg], 1
+ 
+    return global_errors, len(global_errors)
 
 def sanitize_code_semantics(text: str, language, parser) -> str:
     text_bytes = bytearray(text.encode('utf-8'))
     tree = parser.parse(bytes(text_bytes))
-    
+ 
     query_scm = """
     (comment) @comment
     (call_expression 
@@ -59,26 +127,34 @@ def sanitize_code_semantics(text: str, language, parser) -> str:
     query = Query(language, query_scm)
     cursor = QueryCursor(query)
     captures = cursor.captures(tree.root_node)
-    
+ 
     nodes_to_remove = []
-    
+ 
     if "comment" in captures:
         for comment_node in captures["comment"]:
             comment_text = text_bytes[comment_node.start_byte:comment_node.end_byte].decode('utf-8').lower()
             if not any(k in comment_text for k in ["eslint", "typescript", "@ts"]):
                 nodes_to_remove.append(comment_node)
-        
+ 
     if "call" in captures and "func_name" in captures:
         for call_node, name_node in zip(captures["call"], captures["func_name"]):
             name = bytes(text_bytes[name_node.start_byte:name_node.end_byte]).decode('utf-8').lower()
             if "challenge" in name.lower():
                 nodes_to_remove.append(call_node)
-
-    nodes_to_remove = sorted(list(set(nodes_to_remove)), key=lambda n: n.start_byte, reverse=True)
-    
+ 
+    # FIX: set() em nós do tree-sitter depende de __hash__ não garantido entre versões.
+    #      Deduplicação explícita por start_byte é segura e determinística.
+    seen_starts = set()
+    unique_nodes = []
+    for n in nodes_to_remove:
+        if n.start_byte not in seen_starts:
+            seen_starts.add(n.start_byte)
+            unique_nodes.append(n)
+    nodes_to_remove = sorted(unique_nodes, key=lambda n: n.start_byte, reverse=True)
+ 
     for node in nodes_to_remove:
         del text_bytes[node.start_byte:node.end_byte]
-        
+ 
     return text_bytes.decode('utf-8').strip()
 
 def extract_functions(code_bytes, language, parser):
@@ -113,49 +189,6 @@ def extract_functions(code_bytes, language, parser):
         funcs.append((node.start_byte, node.end_byte, node.end_byte - node.start_byte, func_name))
         
     return funcs
-
-# --- 1-HOP LOCAL GRAPH FLATTENING ---
-def extract_graph_context(code_bytes, language, parser):
-    tree = parser.parse(code_bytes)
-    
-    query_scm = """
-    (import_statement) @import
-    (import_require_clause) @import_req
-    (lexical_declaration) @decl
-    (variable_declaration) @decl
-    """
-    query = Query(language, query_scm)
-    cursor = QueryCursor(query)
-    captures = cursor.captures(tree.root_node)
-    
-    dependencies = []
-    
-    if "import" in captures:
-        for node in captures["import"]:
-            text = code_bytes[node.start_byte:node.end_byte].decode('utf-8')
-            if "challenge" not in text.lower():
-                dependencies.append(text)
-            
-    if "import_req" in captures:
-        for node in captures["import_req"]:
-            parent = node.parent
-            if parent:
-                text = code_bytes[parent.start_byte:parent.end_byte].decode('utf-8')
-                if "challenge" not in text.lower():
-                    dependencies.append(text)
-    
-    if "decl" in captures:
-        for node in captures["decl"]:
-            text = code_bytes[node.start_byte:node.end_byte].decode('utf-8')
-            if "require(" in text.replace(" ", "") and "challenge" not in text.lower():
-                dependencies.append(text)
-                
-    unique_deps = []
-    for d in dependencies:
-        if d not in unique_deps:
-            unique_deps.append(d)
-            
-    return "\n".join(unique_deps)
 
 def clean_llm_response(response, original_code):
     if not response: return original_code
