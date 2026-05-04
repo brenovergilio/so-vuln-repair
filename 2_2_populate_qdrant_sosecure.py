@@ -5,7 +5,6 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import SparseVectorParams, SparseIndexParams, PointStruct, SparseVector
 from fastembed import SparseTextEmbedding
 
-# --- Configuration ---
 input_file = "sosecure_js_ts_final.jsonl" 
 collection_name = "sosecure_bm25_js_ts"
 qdrant_host = "localhost"
@@ -13,13 +12,11 @@ qdrant_port = 6333
 batch_size = 64
 
 print(f"--- Loading Sparse Model (BM25) ---")
-# Mantemos apenas o modelo esparso para seguir a metodologia do SOSecure
 sparse_model = SparseTextEmbedding(model_name="Qdrant/bm25")
 
 print(f"--- Connecting to Qdrant ---")
 client = QdrantClient(host=qdrant_host, port=qdrant_port)
 
-# Recriando a coleção APENAS com configuração para vetores esparsos
 client.recreate_collection(
     collection_name=collection_name,
     sparse_vectors_config={
@@ -37,7 +34,6 @@ def extract_code_blocks(html_body):
 
 def process_and_upload_batch(client, collection_name, text_batch, meta_batch):
     try:
-        # 1. Gerar apenas Embeddings Esparsos
         sparse_embeddings = list(sparse_model.embed(text_batch))
         
         points = []
@@ -58,7 +54,6 @@ def process_and_upload_batch(client, collection_name, text_batch, meta_batch):
                 payload=meta["payload"]
             ))
             
-        # 2. Upload para o Qdrant
         client.upsert(collection_name=collection_name, points=points)
         return True
         
@@ -80,10 +75,8 @@ with open(input_file, 'r', encoding='utf-8') as f:
             doc = json.loads(line)
             body = doc.get('body', '')
             
-            # Extrai estritamente o código para o BM25 indexar
             code_only = extract_code_blocks(body)
             
-            # Pula a indexação se a resposta não tiver código, conforme artigo
             if not code_only:
                 skipped_no_code += 1
                 continue
@@ -91,7 +84,7 @@ with open(input_file, 'r', encoding='utf-8') as f:
             payload = {
                 "original_id": doc['id'],
                 "parent_id": doc.get('parent_id'),
-                "body": body, # Salvamos o body completo no payload para recuperar depois
+                "body": body,
                 "comments": doc.get('comments', []),
                 "tags": doc.get('tags', []),
                 "url": f"https://stackoverflow.com/a/{doc['id']}"
@@ -116,7 +109,6 @@ with open(input_file, 'r', encoding='utf-8') as f:
             batch_texts = []
             batch_meta = []
 
-    # Upload do último batch restante
     if batch_texts:
         success = process_and_upload_batch(client, collection_name, batch_texts, batch_meta)
         if success:

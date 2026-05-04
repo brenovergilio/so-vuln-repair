@@ -10,6 +10,7 @@ sqlite_temp_spill/
 .env
 experiment_results*/
 test_cve_fixes/
+cve_fixes/
 juice-shop/
 __pycache__/
 juice-shop/

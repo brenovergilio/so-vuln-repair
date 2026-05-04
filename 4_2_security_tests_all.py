@@ -2,6 +2,7 @@ import os
 import subprocess
 import json
 import time
+import datetime
 import requests
 import re
 import uuid
@@ -11,10 +12,8 @@ import csv
 import codeql_scanner
 from dotenv import load_dotenv
 
-# --- LOAD ENV ---
 load_dotenv()
 
-# --- CONFIGURATIONS ---
 BASE_REPO = "./juice-shop"
 RESULTS_DIR_LOCAL = "./experiment_results/local/juice-shop"
 RESULTS_DIR_OCI = "./experiment_results/oci/juice-shop"
@@ -88,14 +87,12 @@ def check_deep_integrity(target_dir, run_id, provider_dir):
         )
         if not ok: build_success = False
     
-    # Compila apenas o backend
     ok, _ = run_command(
         ["npm", "run", "build:server"], "Build Backend", cwd=target_dir, ignore_error=True,
         error_log_path=os.path.join(build_errors_dir, "build_server_error.log")
     )
     if not ok: build_success = False
     
-    # Testa apenas o backend
     print("   ℹ️  Running server unit tests...")
     back_ok, back_out = run_command(
         ["npm", "run", "test:server"], "Unit Tests (Server)", cwd=target_dir, ignore_error=True,
@@ -103,7 +100,6 @@ def check_deep_integrity(target_dir, run_id, provider_dir):
     )
     back_passed = extract_test_passing_count(back_out, "mocha")
     
-    # Retorna 0 fixo para o frontend_passed para não quebrar a estrutura do CSV
     return build_success, back_passed, 0
 
 def inject_sonar_properties(target_dir, run_id):
@@ -360,20 +356,62 @@ def clean_previous_run_data(run_id, sec_csv_path, tests_csv_path, report_dir):
                         f.write(line)
 
 def rebuild_native_addons():
-    """
-    Reconstrói os addons nativos (sqlite3, etc.) para a versão atual do Node.js.
-    Precisa rodar apenas uma vez pois o node_modules é compartilhado via symlink.
-    """
     print(f"\n[SETUP] Rebuilding native addons for current Node.js version...")
+
+    try:
+        node_version = subprocess.run(
+            ["node", "-v"], capture_output=True, text=True, check=True
+        ).stdout.strip()
+        node_module_version = subprocess.run(
+            ["node", "-e", "console.log(process.versions.modules)"],
+            capture_output=True, text=True, check=True
+        ).stdout.strip()
+        print(f"   ℹ️  Node.js {node_version} (NODE_MODULE_VERSION {node_module_version})")
+    except subprocess.CalledProcessError as e:
+        print(f"❌ FATAL: Não foi possível detectar a versão do Node.js: {e}")
+        sys.exit(1)
+
+    sqlite3_dir = os.path.join(BASE_REPO, "node_modules", "sqlite3")
+    if os.path.exists(sqlite3_dir):
+        build_dir = os.path.join(sqlite3_dir, "build")
+        binding_dir = os.path.join(sqlite3_dir, "lib", "binding")
+
+        if os.path.exists(build_dir):
+            print(f"   🧹 Removing old build directory: {build_dir}")
+            shutil.rmtree(build_dir)
+        if os.path.exists(binding_dir):
+            print(f"   🧹 Removing old binding directory: {binding_dir}")
+            shutil.rmtree(binding_dir)
+
     ok, _ = run_command(
-        ["npm", "rebuild", "sqlite3"],
-        "Rebuild sqlite3",
+        ["npm", "rebuild", "sqlite3", "--build-from-source"],
+        "Rebuild sqlite3 (--build-from-source)",
         cwd=BASE_REPO,
         ignore_error=False
     )
     if not ok:
-        print("❌ FATAL: Falha ao rebuildar sqlite3. DAST não funcionará.")
+        print("❌ FATAL: Falha ao rebuildar sqlite3.")
+        print("   Verifique se python3, make e g++ estão instalados:")
+        print("   sudo apt-get install -y python3 make g++ build-essential")
         sys.exit(1)
+
+    binary_path = os.path.join(BASE_REPO, "node_modules", "sqlite3", "build", "Release", "node_sqlite3.node")
+    if not os.path.exists(binary_path):
+        result = subprocess.run(
+            ["find", os.path.join(BASE_REPO, "node_modules", "sqlite3"), "-name", "*.node"],
+            capture_output=True, text=True
+        )
+        if result.stdout.strip():
+            print(f"   ⚠️  Binary found at non-standard location:\n{result.stdout}")
+        else:
+            print(f"❌ FATAL: Rebuild reportou sucesso mas {binary_path} não foi gerado.")
+            sys.exit(1)
+    else:
+        mtime = os.path.getmtime(binary_path)
+        mtime_str = datetime.datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
+        print(f"   ✅ Binary generated at: {binary_path}")
+        print(f"      mtime: {mtime_str}")
+
     print("   ✅ Native addons rebuilt successfully.")
 
 def run_experiment():
@@ -441,9 +479,6 @@ def run_experiment():
         metrics["sast"] = run_sast_codeQL(target_dir, report_dir)
         metrics["sonar"] = run_sonarqube_scan(target_dir, run_id)
 
-        # FIX: build explícito antes do DAST — o symlink de node_modules não copia
-        # o build/, e o npm start depende de node build/app para subir o servidor.
-        # check_deep_integrity já validou a compilação; aqui geramos o build/ de fato.
         print(f"\n[BUILD] Compiling patched code for DAST ({run_id})...")
         build_ok, _ = run_command(
             ["npm", "run", "build:server"], "Build Server (pre-DAST)", cwd=target_dir,

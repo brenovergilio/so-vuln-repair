@@ -2,11 +2,9 @@
 
 CONTAINER_NAME="qdrant"
 
-# Check if the container already exists (running or stopped)
 if docker container inspect "$CONTAINER_NAME" > /dev/null 2>&1; then
     echo "📦 The container '$CONTAINER_NAME' already exists."
     
-    # Check if it is currently running
     if [ "$(docker inspect -f '{{.State.Running}}' $CONTAINER_NAME)" = "true" ]; then
         echo "✅ It is already running. No action needed."
     else
@@ -16,7 +14,6 @@ if docker container inspect "$CONTAINER_NAME" > /dev/null 2>&1; then
 else
     echo "🚀 Container not found. Creating and starting '$CONTAINER_NAME'..."
     
-    # Run the new container
     docker run -d --restart unless-stopped --name "$CONTAINER_NAME" \
         -p 6333:6333 \
         -p 6334:6334 \

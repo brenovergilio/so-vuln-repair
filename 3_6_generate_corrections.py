@@ -18,18 +18,14 @@ from utils import (
     get_func_id, get_type_aware_context, run_tsc_check
 )
 
-# --- LOAD ENV ---
 load_dotenv()
 
-# --- CONFIGURATION ---
 BASE_REPO = "./juice-shop"
 PROVIDER = os.getenv("PROVIDER", "local")
 OUTPUT_DIR = f"./experiment_results/{PROVIDER}/juice-shop"
 NUM_ITERATIONS = int(os.getenv("NUM_ITERATIONS", 3))
-# FIX: max_workers parametrizável via env; padrão 1 mantido para reprodutibilidade,
-#      mas agora pode ser aumentado sem alterar o código
 MAX_WORKERS = int(os.getenv("MAX_WORKERS", 1))
-TREATMENTS = ["posecure-extractive", "posecure-abstractive", "cvefixes"] # "llm-raw", "sosecure", "posecure-extractive", "posecure-abstractive", "cvefixes"
+TREATMENTS = ["llm-raw", "sosecure", "posecure-extractive", "posecure-abstractive", "cvefixes"]
 
 TARGET_EXTENSIONS, IGNORE_EXTENSIONS, TARGET_DIRS, IGNORE_DIRS, IGNORE_FILES = get_dirs_and_extensions()
 
@@ -38,9 +34,6 @@ RAW_JSON_PATH = "./raw_so_contexts.json"
 ABSTRACTIVE_JSON_PATH = "./abstractive_contexts.json"
 CVEFIXES_JSON_PATH = "./cvefixes_contexts.json"
 
-# =====================================================================
-# --- TYPE-EXTRACTOR SERVER ORCHESTRATION ---
-# =====================================================================
 node_server_process = None
 
 def cleanup_node_server():
@@ -93,18 +86,12 @@ def start_type_extractor_server():
         sys.exit(1)
 
 atexit.register(cleanup_node_server)
-# FIX: start_type_extractor_server() movido para dentro de main() para
-#      evitar side-effect no import/nível de módulo
 
-# Variáveis separadas para carregar os conteúdos
 compressed_contexts = {}
 raw_contexts = {}
 abstractive_contexts = {}
 cvefixes_contexts = {}
 
-# =====================================================================
-# --- SOSECURE REPLICATION PROMPTS ---
-# =====================================================================
 PROMPT_SYS = "You are a helpful assistant that generates secure JavaScript/TypeScript code. Please provide all generated code in one code block."
 
 def get_prompt_raw(query, type_signatures=""):
@@ -150,11 +137,9 @@ However, when compiling, it resulted in the following TypeScript build errors:
 - KEEP THE EXACT SAME FUNCTION SIGNATURE.
 """
 
-# --- TOKENIZER SETUP ---
 tokenizer = get_llama_tokenizer()
 print("✅ Tokenizer loaded.")
 
-# --- TREE-SITTER SETUP ---
 language, parser = get_ts_tree_sitter_language_and_parser()
 
 try:
@@ -181,7 +166,6 @@ def process_file(file_path, treatment, run_id, dest_path):
             
         functions = extract_functions(code_bytes, language, parser)
         if not functions:
-            # FIX: tupla de retorno padronizada com 8 valores em todos os caminhos
             return 0, 0, 0, 0, 0, 0, 0.0
             
         functions.sort(key=lambda x: x[0], reverse=True)
@@ -224,18 +208,15 @@ def process_file(file_path, treatment, run_id, dest_path):
                 final_rag_context = f"[KNOWN VULNERABILITY FIXES]\n{cvefixes_examples}" if cvefixes_examples else ""
                 user_content = get_prompt_cvefixes(clean_func_text, final_rag_context, type_signatures)
 
-            # --- VARIÁVEIS DE CONTROLE PARA O LOG FINAL DESTA FUNÇÃO ---
             func_in_tokens = count_llama_tokens(system_prompt + "\n" + user_content, tokenizer)
             file_input_tokens += func_in_tokens
             
             func_out_tokens = 0
             patch_status = "Skipped (No changes)"
             
-            # String acumuladora para o log final
             func_log_content = f"Function: {func_name}\n"
             func_log_content += f"Input (Pass 1):\n{user_content}\n"
             
-            # PRIMEIRA CHAMADA
             start_time = time.time()
             llm_response = llm_client.generate_completion(system_prompt, user_content)
             file_duration += (time.time() - start_time)
@@ -258,7 +239,6 @@ def process_file(file_path, treatment, run_id, dest_path):
                     
                     patch_accepted = False
 
-                    # TIER 2: COMPILER FEEDBACK E SELF-HEALING (Ignora o Tree-sitter)
                     with open(file_path, 'wb') as f_out: f_out.write(temp_bytes)
                     
                     build_errors_list, error_count = run_tsc_check(dest_path)
@@ -311,8 +291,6 @@ def process_file(file_path, treatment, run_id, dest_path):
                             patch_status = "Rejected (Healing Generation Failed)"
                         
                         if not patch_accepted:
-                            # FIX: restaura para code_bytes (estado consolidado até aqui),
-                            # não para o original do arquivo — preserva patches anteriores aceitos
                             with open(file_path, 'wb') as f_out: f_out.write(code_bytes)
                             with open(failed_healing_log_path, "a", encoding="utf-8") as f_fail:
                                 f_fail.write(f"\n[{rel_path_key} - {func_name}] FALHA IRRECUPERÁVEL DE COMPILAÇÃO:\n")
@@ -327,7 +305,6 @@ def process_file(file_path, treatment, run_id, dest_path):
                         loc_churn += abs(len(cleaned_code.splitlines()) - len(clean_func_text.splitlines()))
                         valid_mods += 1
             
-            # === ESCREVE O LOG FINAL DESTA FUNÇÃO ===
             with open(log_file_path, "a", encoding="utf-8") as log_f:
                 log_f.write(f"Status: {patch_status}\n")
                 log_f.write(f"Total Input Tokens: {func_in_tokens}\n")
@@ -335,7 +312,6 @@ def process_file(file_path, treatment, run_id, dest_path):
                 log_f.write(func_log_content)
                 log_f.write("=========================\n")
 
-        # Salva a versão final e consolidada do arquivo
         with open(file_path, 'wb') as f_out: 
             f_out.write(code_bytes)
             
@@ -343,7 +319,6 @@ def process_file(file_path, treatment, run_id, dest_path):
 
     except Exception as e:
         print(f"⚠️  Error in {file_path}: {e}")
-        # FIX: tupla de retorno padronizada com 8 valores (era 7, causava ValueError no unpack)
         return 0, 0, 0, 0, 0, 0, 0.0
 
 def pre_compute_total_functions(dest_path):
@@ -399,7 +374,6 @@ def run_iteration(treatment, i):
                 and not any(f.endswith(ext) for ext in IGNORE_EXTENSIONS)
             ])
 
-    # FIX: todos os 8 valores desempacotados corretamente; failed_healings agora acumulado
     tot_valid = tot_failed_healings = tot_loc_churn = 0
     tot_in_tokens = tot_out_tokens = tot_chars_for_cost = 0
     tot_time = 0.0
@@ -411,7 +385,7 @@ def run_iteration(treatment, i):
             desc=f"Refactoring"
         ):
             tot_valid += v
-            tot_failed_healings += fh  # FIX: métrica antes perdida
+            tot_failed_healings += fh
             tot_loc_churn += l
             tot_in_tokens += in_t
             tot_out_tokens += out_t
@@ -423,7 +397,6 @@ def run_iteration(treatment, i):
     print(f"✅ LLM Phase Complete. Patches: {tot_valid} | Failed Healings: {tot_failed_healings} | Cost: ${run_cost:.4f} | Time: {tot_time:.2f}s")
     print(f"📊 Exact Tokens: {tot_in_tokens} (Input) + {tot_out_tokens} (Output) = {tot_in_tokens + tot_out_tokens} Total")
 
-    # FIX: failed_healings incluído no CSV
     with open(os.path.join(OUTPUT_DIR, "llm_metrics.csv"), "a") as f:
         f.write(f"{run_id},{tot_valid},{tot_failed_healings},{tot_loc_churn},{tot_in_tokens},{tot_out_tokens},{tot_time:.2f},{run_cost:.4f}\n")
 
@@ -431,10 +404,8 @@ def main():
     if not os.path.exists(BASE_REPO): return print(f"❌ Error: {BASE_REPO} not found.")
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    # FIX: servidor iniciado aqui, dentro de main(), evitando side-effect no import
     start_type_extractor_server()
 
-    # FIX: carregamento dos contextos movido para cá também, após server start e dentro de main()
     if "posecure-extractive" in TREATMENTS:
         if os.path.exists(COMPRESSED_JSON_PATH):
             with open(COMPRESSED_JSON_PATH, "r", encoding="utf-8") as f:
@@ -466,7 +437,6 @@ def main():
     csv_path = os.path.join(OUTPUT_DIR, "llm_metrics.csv")
     if not os.path.exists(csv_path):
         with open(csv_path, "w") as f:
-            # FIX: cabeçalho do CSV atualizado para incluir Failed_Healings
             f.write("Run_ID,Valid_Patches,Failed_Healings,LOC_Churn,Input_Tokens,Output_Tokens,Total_Time_Sec,Cost_USD\n")
 
     for treatment in TREATMENTS:

@@ -3,7 +3,6 @@ import os
 import statistics
 from utils import get_llama_tokenizer, count_llama_tokens
 
-# --- CONFIGURATION ---
 JSON_FILES = [
     "raw_so_contexts.json",
     "extractive_contexts.json",
@@ -55,7 +54,6 @@ def analyze_json_tokens(file_path: str, tokenizer):
     except Exception as e:
         print(f"❌ Ocorreu um erro ao processar '{file_path}': {e}")
 
-# --- EXECUTION ---
 if __name__ == "__main__":
     print("=" * 50)
     print("🧠 RAG CONTEXTS TOKEN ANALYZER")

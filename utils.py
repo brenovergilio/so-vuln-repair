@@ -35,15 +35,13 @@ def get_dirs_and_extensions():
         {"routes", "models"}, # TARGET_DIRS
         {"node_modules", ".git", "test", "dist", ".angular", "e2e", "vagrant", "assets", "environments", "frontend"}, # IGNORE_DIRS
         {"verify.ts", "vulnCodeFixes.ts", "vulnCodeSnippet.ts"}] # IGNORE_FILES
-# FIX: flag de controle para emitir o aviso de tokenizer nulo apenas uma vez,
-#      evitando spam no log e tornando a falha visível sem interromper a execução
+
 _tokenizer_warning_emitted = False
  
 def count_llama_tokens(text: str, tokenizer) -> int:
     global _tokenizer_warning_emitted
     if not text:
         return 0
-    # FIX: tokenizer None retornava 0 silenciosamente, corrompendo todas as métricas
     if tokenizer is None:
         if not _tokenizer_warning_emitted:
             print("⚠️  AVISO: tokenizer é None — contagens de tokens serão 0. Métricas de custo estarão incorretas.")
@@ -60,11 +58,9 @@ def count_syntax_errors(tree, language=None, parser=None):
     
     def walk(node):
         nonlocal error_count
-        # Contabiliza se for um erro de sintaxe ou um token esquecido (missing)
         if node.type == 'ERROR' or node.is_missing:
             error_count += 1
             
-        # Continua a busca recursiva em todos os filhos
         for child in node.children:
             walk(child)
             
@@ -88,14 +84,10 @@ def run_tsc_check(dest_path):
         output = result.stdout
         return_code = result.returncode
     except FileNotFoundError:
-        # FIX: 'npx' não encontrado retornava ([], 0), aceitando todos os patches
-        #      sem nenhuma validação real. Agora propaga o erro explicitamente.
         msg = "FATAL: 'npx' não encontrado no PATH. Verifique a instalação do Node.js."
         print(f"❌ {msg}")
         return [msg], 1
     except Exception as e:
-        # FIX: outros erros de subprocess também geravam output sem "error TS",
-        #      fazendo run_tsc_check retornar 0 erros incorretamente
         msg = f"FATAL: Falha ao executar tsc: {e}"
         print(f"❌ {msg}")
         return [msg], 1
@@ -105,8 +97,6 @@ def run_tsc_check(dest_path):
         if "error TS" in line:
             global_errors.append(line.strip())
  
-    # FIX: tsc pode falhar por razões não-TS (ex: tsconfig.json ausente) sem gerar
-    #      linhas "error TS" — nesse caso o returncode != 0 é o único sinal de falha
     if return_code != 0 and not global_errors:
         fallback_msg = f"tsc encerrou com código {return_code} mas nenhum erro TS foi parseado. Output: {output.strip()[:300]}"
         print(f"⚠️  {fallback_msg}")
@@ -142,8 +132,6 @@ def sanitize_code_semantics(text: str, language, parser) -> str:
             if "challenge" in name.lower():
                 nodes_to_remove.append(call_node)
  
-    # FIX: set() em nós do tree-sitter depende de __hash__ não garantido entre versões.
-    #      Deduplicação explícita por start_byte é segura e determinística.
     seen_starts = set()
     unique_nodes = []
     for n in nodes_to_remove:
@@ -193,15 +181,12 @@ def extract_functions(code_bytes, language, parser):
 def clean_llm_response(response, original_code):
     if not response: return original_code
     
-    # Extrai estritamente o código que a IA jogou no Markdown
     match = re.search(r'```(?:javascript|typescript|js|ts)?\s*(.*?)\s*```', response, re.DOTALL | re.IGNORECASE)
     cleaned = match.group(1).strip() if match else response.strip()
     
-    # Adicionado fallback caso o modelo retorne a mensagem de que não encontrou problemas
     if "No security issues found" in cleaned:
         return original_code.strip()
     
-    # Previne a alucinação extra da IA onde ela as vezes retorna os prompts junto com a resposta
     cleaned = re.sub(r'^(CODE TO FIX:|COMMUNITY SECURITY DISCUSSION:)\s*', '', cleaned, flags=re.IGNORECASE).strip()
     
     return cleaned
@@ -220,7 +205,6 @@ from qdrant_client import models
 
 def retrieve_from_qdrant(qdrant_client, sparse_model, clean_func_text, limit=5, collection_name="sosecure_bm25_js_ts"):
     try:
-        # 1. Geração do vetor BM25
         sparse_generator = sparse_model.embed([clean_func_text])
         sparse_vector_obj = list(sparse_generator)[0]
         sparse_vector = models.SparseVector(
@@ -228,7 +212,6 @@ def retrieve_from_qdrant(qdrant_client, sparse_model, clean_func_text, limit=5, 
             values=sparse_vector_obj.values.tolist()
         )
                                 
-        # 2. Busca no Qdrant
         results = qdrant_client.query_points(
             collection_name=collection_name,
             query=sparse_vector,
@@ -240,9 +223,7 @@ def retrieve_from_qdrant(qdrant_client, sparse_model, clean_func_text, limit=5, 
         for hit in results.points:
             p = hit.payload or {}
             
-            # 3. Roteamento de Formatação (CVEfixes vs SOSecure)
             if "cvefixes" in collection_name.lower():
-                # Formatação estrita para Code-to-Code RAG
                 vuln_code = str(p.get('vulnerable_code', '')).strip()
                 fixed_code = str(p.get('fixed_code', '')).strip()
                 cve_id = p.get('cve_id', 'Unknown')
@@ -254,7 +235,6 @@ def retrieve_from_qdrant(qdrant_client, sparse_model, clean_func_text, limit=5, 
                 context_blocks.append(block)
                 
             else:
-                # Formatação clássica para o SOSecure (Stack Overflow)
                 answer_body = p.get('body', '')
                 comments = p.get('comments', [])
                 
@@ -262,7 +242,6 @@ def retrieve_from_qdrant(qdrant_client, sparse_model, clean_func_text, limit=5, 
                 block += "\n".join([f"- {c}" for c in comments])
                 context_blocks.append(block)
         
-        # 4. Junção dos blocos recuperados
         if context_blocks:        
             return "\n\n=======================\n\n".join(context_blocks)
         return ""
@@ -284,7 +263,7 @@ def get_type_aware_context(file_path: str, clean_func_text = "") -> str:
         url = "http://localhost:3001/extract-types" 
         payload = {
             "filePath": file_path,
-            "functionText": clean_func_text  # <-- Injetamos o código aqui
+            "functionText": clean_func_text
         }
         response = requests.post(url, json=payload, timeout=30)
         

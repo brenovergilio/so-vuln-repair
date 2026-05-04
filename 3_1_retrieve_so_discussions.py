@@ -7,25 +7,18 @@ from pathlib import Path
 from tqdm import tqdm
 from dotenv import load_dotenv
 
-# --- LOAD ENV & CONFIGURATION ---
 load_dotenv()
 
 BASE_REPO = "./juice-shop"
-# CRÍTICA APLICADA: Nome do arquivo alterado para refletir o dado real (bruto, não comprimido)
-# e salvo na raiz do projeto (./) conforme solicitado.
 RAW_JSON_PATH = "./raw_so_contexts.json"
 
 TARGET_EXTENSIONS, IGNORE_EXTENSIONS, TARGET_DIRS, IGNORE_DIRS, IGNORE_FILES = get_dirs_and_extensions()
 
-# --- TREE-SITTER SETUP ---
 language, parser = get_ts_tree_sitter_language_and_parser()
 
-# --- QDRANT SETUP & BUSCA ---
 qdrant_client, sparse_model = get_qdrant_client()
 
-# --- MAIN RETRIEVAL ---
 def main():
-    # Iniciando a marcação de tempo
     start_time = time.time()
     
     print("\n⚙️ [FASE 1 - CACHE] Iniciando extração de contexto bruto do Qdrant...")
@@ -64,10 +57,8 @@ def main():
             processed_hashes.add(func_id)
             
             try:
-                # Recuperação bruta direta
                 raw_context = retrieve_from_qdrant(qdrant_client, sparse_model, clean_func_text, limit=5)
                 
-                # Armazena o valor bruto, tratando vazios e nulos
                 precomputed_data[rel_path][func_id] = raw_context if raw_context and raw_context.strip() else ""
                 
             except Exception as e:
@@ -75,11 +66,9 @@ def main():
                 print(traceback.format_exc())
                 precomputed_data[rel_path][func_id] = ""
                 
-    # Salvar em JSON na raiz do projeto
     with open(RAW_JSON_PATH, "w", encoding="utf-8") as f:
         json.dump(precomputed_data, f, indent=4)
         
-    # Finalizando a marcação de tempo
     end_time = time.time()
     elapsed_time = end_time - start_time
     

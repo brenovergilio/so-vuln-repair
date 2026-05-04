@@ -7,27 +7,21 @@ from pathlib import Path
 from tqdm import tqdm
 from dotenv import load_dotenv
 
-# Importar a classe LLMClient (Ajuste a importação de acordo com o nome do seu ficheiro)
 from llm_client import LLMClient
 
-# --- LOAD ENV & CONFIGURATION ---
 load_dotenv()
 
 BASE_REPO = "./juice-shop"
-# Vamos usar o novo provider criado no LLMClient
 PROVIDER = "compressor"
 
 PRECOMPUTED_JSON_PATH = "./abstractive_contexts.json"
 
 TARGET_EXTENSIONS, IGNORE_EXTENSIONS, TARGET_DIRS, IGNORE_DIRS, IGNORE_FILES = get_dirs_and_extensions()
 
-# --- TREE-SITTER SETUP ---
 language, parser = get_ts_tree_sitter_language_and_parser()
 
-# --- QDRANT SETUP & BUSCA ---
 qdrant_client, sparse_model = get_qdrant_client()
 
-# --- PROMPTS DE SUMARIZAÇÃO ---
 SYS_PROMPT = """You are an expert cybersecurity context extractor. 
 Your task is to compress StackOverflow discussions into concise, dense summaries focused ONLY on security fixes, vulnerabilities, and best practices.
 DO NOT hallucinate. DO NOT write code that is not present in the discussion. 
@@ -44,14 +38,12 @@ Discussion:
 
 Provide a concise summary of the security fixes:"""
 
-# --- MAIN PRECOMPUTATION ---
 def main():
     start_time = time.time()
     
     print(f"\n⚙️ [FASE 1] Iniciando Sumarização Abstrativa via LLM (Provider: {PROVIDER})...")
     
     try:
-        # Instanciar o cliente apontando para o Ollama
         llm_compressor = LLMClient(provider=PROVIDER)
         print("✅ Cliente Ollama para Sumarização carregado com sucesso!")
     except Exception as e:
@@ -90,14 +82,12 @@ def main():
             if func_id in processed_hashes: continue
             processed_hashes.add(func_id)
             
-            # 1. Recuperar contexto bruto do Qdrant
             raw_context = retrieve_from_qdrant(qdrant_client, sparse_model, clean_func_text, limit=5)
             
             if not raw_context or not raw_context.strip():
                 precomputed_data[rel_path][func_id] = ""
                 continue
                 
-            # 2. Enviar para o Ollama sumarizar
             try:
                 user_prompt = get_summarization_prompt(raw_context, clean_func_text)
                 

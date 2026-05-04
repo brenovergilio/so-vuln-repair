@@ -9,7 +9,6 @@ from pathlib import Path
 from tqdm import tqdm
 from dotenv import load_dotenv
 
-# --- LOAD ENV & CONFIGURATION ---
 load_dotenv()
 
 BASE_REPO = "./juice-shop"
@@ -19,13 +18,10 @@ PRECOMPUTED_JSON_PATH = "./compressed_contexts2.json"
 
 TARGET_EXTENSIONS, IGNORE_EXTENSIONS, TARGET_DIRS, IGNORE_DIRS, IGNORE_FILES = get_dirs_and_extensions()
 
-# --- TREE-SITTER SETUP ---
 language, parser = get_ts_tree_sitter_language_and_parser()
 
-# --- QDRANT SETUP & BUSCA ---
 qdrant_client, sparse_model = get_qdrant_client()
 
-# --- MAIN PRECOMPUTATION ---
 def main():
     start_time = time.time()
     

@@ -59,18 +59,6 @@ try:
                         
                         if (tags_set & TARGET_TAGS) and not (tags_set & EXCLUDE_TAGS):
                             valid_question_ids.add(post_id)
-                            
-                            #data = {
-                            #    "id": str(post_id),
-                            #    "type": "1",
-                            #    "parent_id": None,
-                            #    "score": elem.get('Score'),
-                            #    "tags": list(tags_set),
-                            #    "title": elem.get("Title", ""),
-                            #    "body": elem.get("Body", "")
-                           #}
-                            #out_f.write(json.dumps(data) + '\n')
-                            #saved += 1
 
                     # --- Type 2: Answer ---
                     elif post_type == "2":

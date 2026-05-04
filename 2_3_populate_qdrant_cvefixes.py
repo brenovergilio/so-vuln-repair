@@ -7,8 +7,6 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import SparseVectorParams, SparseIndexParams, PointStruct, SparseVector
 from fastembed import SparseTextEmbedding
 
-# --- A MÁGICA PARA O ERRO DO CSV ---
-# Aumenta o limite de tamanho de uma única célula do CSV de forma iterativa e segura
 maxInt = sys.maxsize
 while True:
     try:
@@ -17,7 +15,6 @@ while True:
     except OverflowError:
         maxInt = int(maxInt/10)
 
-# --- Configuration ---
 input_file = "ts_js_cvefixes.csv"  
 collection_name = "cvefixes_bm25_js_ts"
 qdrant_host = "localhost"
@@ -30,7 +27,6 @@ sparse_model = SparseTextEmbedding(model_name="Qdrant/bm25")
 print(f"--- Connecting to Qdrant ---")
 client = QdrantClient(host=qdrant_host, port=qdrant_port)
 
-# Mantido exatamente com o recreate_collection (Warning ignorado)
 client.recreate_collection(
     collection_name=collection_name,
     vectors_config={}, 
@@ -90,7 +86,7 @@ with open(input_file, mode='r', encoding='utf-8') as f:
 
         MAX_CHARS = 50000 
         if len(vuln_code) > MAX_CHARS or len(fixed_code) > MAX_CHARS:
-            skipped_too_large += 1 # Não se esqueça de declarar esta variável lá em cima junto com skipped_no_code
+            skipped_too_large += 1
             continue
 
         cwe_id = str(row.get('cwe_id', 'Unknown'))

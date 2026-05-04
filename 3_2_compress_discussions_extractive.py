@@ -9,26 +9,20 @@ from pathlib import Path
 from tqdm import tqdm
 from dotenv import load_dotenv
 
-# --- LOAD ENV & CONFIGURATION ---
 load_dotenv()
 
 BASE_REPO = "./juice-shop"
 PROVIDER = os.getenv("PROVIDER", "local")
 
-# Caminho alterado para a raiz do projeto, conforme solicitado.
 PRECOMPUTED_JSON_PATH = "./extractive_contexts.json"
 
 TARGET_EXTENSIONS, IGNORE_EXTENSIONS, TARGET_DIRS, IGNORE_DIRS, IGNORE_FILES = get_dirs_and_extensions()
 
-# --- TREE-SITTER SETUP ---
 language, parser = get_ts_tree_sitter_language_and_parser()
 
-# --- QDRANT SETUP & BUSCA ---
 qdrant_client, sparse_model = get_qdrant_client()
 
-# --- MAIN PRECOMPUTATION ---
 def main():
-    # Início do rastreamento de tempo
     start_time = time.time()
     
     print(f"\n⚙️ [FASE 1] Iniciando pré-computação monolítica com LLMLingua-2 (Provider: {PROVIDER})...")
@@ -79,7 +73,6 @@ def main():
             if func_id in processed_hashes: continue
             processed_hashes.add(func_id)
             
-            # Gargalo de I/O (Rede/Banco de Dados)
             raw_context = retrieve_from_qdrant(qdrant_client, sparse_model, clean_func_text, limit=5)
             
             if not raw_context or not raw_context.strip():
@@ -87,7 +80,6 @@ def main():
                 continue
                 
             try:
-                # Gargalo de Processamento (VRAM/GPU)
                 compressed_results = compressor.compress_prompt(
                     context=[raw_context],
                     target_token=1000,
@@ -102,11 +94,9 @@ def main():
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
                 
-    # Salvar em JSON na raiz
     with open(PRECOMPUTED_JSON_PATH, "w", encoding="utf-8") as f:
         json.dump(precomputed_data, f, indent=4)
         
-    # Fim do rastreamento de tempo e cálculos
     end_time = time.time()
     elapsed_time = end_time - start_time
     

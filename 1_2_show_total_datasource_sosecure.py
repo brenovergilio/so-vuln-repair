@@ -1,8 +1,6 @@
 import json
 import os
 
-# --- Configuration ---
-# Substitua pelo nome do arquivo gerado no seu último passo
 input_file = "sosecure_js_ts_final.jsonl" 
 
 def count_database_stats(filepath):
@@ -20,10 +18,8 @@ def count_database_stats(filepath):
             try:
                 doc = json.loads(line)
                 
-                # Cada linha válida no JSONL é uma Resposta (Answer) do Stack Overflow
                 total_answers += 1
                 
-                # Conta quantos comentários estão atrelados a essa resposta
                 comments_list = doc.get("comments", [])
                 total_comments += len(comments_list)
                 

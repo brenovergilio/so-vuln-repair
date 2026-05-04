@@ -7,16 +7,13 @@ load_dotenv()
 print("🔍 Testando autenticação com a Oracle Cloud...")
 
 try:
-    # 1. Tenta carregar o arquivo
     profile = os.getenv("OCI_CONFIG_PROFILE", "DEFAULT")
     config = oci.config.from_file(profile_name=profile)
     print("✅ Arquivo ~/.oci/config lido com sucesso!")
     
-    # 2. Valida se os campos obrigatórios estão preenchidos corretamente
     oci.config.validate_config(config)
     print("✅ Estrutura do config e caminho da chave validados!")
     
-    # 3. Tenta bater na API de Identidade para provar que a chave funciona
     identity = oci.identity.IdentityClient(config)
     response = identity.get_user(config["user"])
     
