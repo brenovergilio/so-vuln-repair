@@ -27,6 +27,8 @@ The pipeline is organized as a sequence of numbered scripts that should be execu
 ├── 4_1_sonarqube_docker_command.sh           # Start SonarQube via Docker
 ├── 4_2_security_tests_all.py                 # Run SAST/code quality evaluation
 ├── codeql_scanner.py                         # CodeQL wrapper used by the security pipeline
+├── end_to_end_example.py                     # Generates a text file containing an end to end example (input for figure of supplementary material)
+├── end_to_end_example.txt                    # Output of end_to_end_example.py
 ├── llm_client.py                             # LLM client (Ollama and OCI providers)
 ├── utils.py                                  # Shared utilities
 ├── requirements.txt                          # Python dependencies
@@ -86,4 +88,4 @@ Use `test_oci_auth.py` to validate OCI credentials before running the cloud pipe
 
 ## Acknowledgments
 
-This repository accompanies a paper currently under submission to SBES. Generative AI tools were used during the preparation of the paper and the development of this pipeline; details are disclosed in the paper's Acknowledgments section.
+This repository accompanies a paper accepted in SBES 2026 - Research Track. Generative AI tools were used during the preparation of the paper and the development of this pipeline; details are disclosed in the paper's Acknowledgments section.
