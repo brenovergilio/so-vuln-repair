@@ -1,0 +1,3086 @@
+⏳ Loading Llama 3.1 Tokenizer...
+✅ Tokenizer loaded.
+✅ Conectado à Oracle Cloud Infrastructure (OCI).
+⏳ Loading Llama 3.1 Tokenizer...
+
+==============================================================================
+[1] ORIGINAL FUNCTION (as found in the repository)
+==============================================================================
+function handleZipFileUpload ({ file }: Request, res: Response, next: NextFunction) {
+  if (utils.endsWith(file?.originalname.toLowerCase(), '.zip')) {
+    if (((file?.buffer) != null) && utils.isChallengeEnabled(challenges.fileWriteChallenge)) {
+      const buffer = file.buffer
+      const filename = file.originalname.toLowerCase()
+      const tempFile = path.join(os.tmpdir(), filename)
+      fs.open(tempFile, 'w', function (err, fd) {
+        if (err != null) { next(err) }
+        fs.write(fd, buffer, 0, buffer.length, null, function (err) {
+          if (err != null) { next(err) }
+          fs.close(fd, function () {
+            fs.createReadStream(tempFile)
+              .pipe(unzipper.Parse())
+              .on('entry', function (entry: any) {
+                const fileName = entry.path
+                const absolutePath = path.resolve('uploads/complaints/' + fileName)
+                challengeUtils.solveIf(challenges.fileWriteChallenge, () => { return absolutePath === path.resolve('ftp/legal.md') })
+                if (absolutePath.includes(path.resolve('.'))) {
+                  entry.pipe(fs.createWriteStream('uploads/complaints/' + fileName).on('error', function (err) { next(err) }))
+                } else {
+                  entry.autodrain()
+                }
+              }).on('error', function (err: unknown) { next(err) })
+          })
+        })
+      })
+    }
+    res.status(204).end()
+  } else {
+    next()
+  }
+}
+
+==============================================================================
+[2] SANITIZED FUNCTION (anti-leakage filter applied; this is what the model sees)
+==============================================================================
+function handleZipFileUpload ({ file }: Request, res: Response, next: NextFunction) {
+  if (utils.endsWith(file?.originalname.toLowerCase(), '.zip')) {
+    if (((file?.buffer) != null) && utils.isChallengeEnabled(challenges.fileWriteChallenge)) {
+      const buffer = file.buffer
+      const filename = file.originalname.toLowerCase()
+      const tempFile = path.join(os.tmpdir(), filename)
+      fs.open(tempFile, 'w', function (err, fd) {
+        if (err != null) { next(err) }
+        fs.write(fd, buffer, 0, buffer.length, null, function (err) {
+          if (err != null) { next(err) }
+          fs.close(fd, function () {
+            fs.createReadStream(tempFile)
+              .pipe(unzipper.Parse())
+              .on('entry', function (entry: any) {
+                const fileName = entry.path
+                const absolutePath = path.resolve('uploads/complaints/' + fileName)
+                challengeUtils.solveIf(challenges.fileWriteChallenge, () => { return absolutePath === path.resolve('ftp/legal.md') })
+                if (absolutePath.includes(path.resolve('.'))) {
+                  entry.pipe(fs.createWriteStream('uploads/complaints/' + fileName).on('error', function (err) { next(err) }))
+                } else {
+                  entry.autodrain()
+                }
+              }).on('error', function (err: unknown) { next(err) })
+          })
+        })
+      })
+    }
+    res.status(204).end()
+  } else {
+    next()
+  }
+}
+
+   func_id (MD5): 1df433510ef050d0afcf0d03b30a108b
+   original tokens: 327
+   sanitized tokens: 327
+
+==============================================================================
+[3] 1-HOP TYPE-AWARE CONTEXT (from the TypeScript Compiler API)
+==============================================================================
+
+⚙️  [SETUP] Verificando necessidade do Type-Extractor Server...
+   🚀 Iniciando o Bi-directional RAG Extractor (Node.js) em background...
+   ⏳ Aguardando servidor Node.js responder na porta 3001...
+.
+   ✅ Type-Extractor Server Online e pronto para uso!
+[LIBRARY SIGNATURES (Type-Aware Context)]
+// Origin of Import: os
+declare const os: typeof import("node:os");
+
+// Origin of Import: fs
+declare const fs: typeof import("node:fs");
+
+// Origin of Import: path
+declare const path: PlatformPath;
+
+// Origin of Import: unzipper
+declare const unzipper: typeof import("/home/ubuntu/so-vuln-repair/juice-shop/node_modules/@types/unzipper/index");
+
+// Origin of Import: NextFunction
+declare const NextFunction: any;
+
+// Origin of Import: Request
+declare const Request: any;
+
+// Origin of Import: Response
+declare const Response: any;
+
+// Origin of Import: challenges
+declare const challenges: Record<ChallengeKey, ChallengeModel>;
+
+declare namespace utils {
+  export const isChallengeEnabled: (challenge: Challenge) => boolean;
+  export const endsWith: (str?: string | undefined, suffix?: string | undefined) => boolean;
+}
+
+
+   type-context tokens: 203
+
+==============================================================================
+[4] RETRIEVED CONTEXT PER TECHNIQUE
+==============================================================================
+
+------------------------------------------------------------------------------
+--- SOSecure  (raw_so_contexts.json)
+------------------------------------------------------------------------------
+tokens: 5106
+
+--- Post Answer ---
+It's 2017 (October 26th, to be exact). For an ancient and pervasive technology such as unzip I would expect there to exist a fairly popular, mature node.js unzip library that is "stagnant" and "unmaintained" because it is "complete". However, most libraries appear either to be completely terrible or to have commits recently as just a few months ago. This is quite concerning... so I've gone through several unzip libraries, read their docs, and tried their examples to try to figure out WTF. For example, I've tried these: thejoshwolfe/ <code>yauzl</code> antelle/ <code>node-stream-zip</code> ZJONSSON/ <code>node-unzipper</code> EvanOxfeld/ <code>node-unzip</code> Stuk/ <code>jszip</code> kriskowal/ <code>zip</code> Update 2020: Haven't tried it yet, but there's also archiver Top Recommendation: <code>yauzl</code> Works great for completely downloaded file. Not as great for streaming. Well documented. Works well. Makes sense. 2nd Pick: <code>node-stream-zip</code> antelle's <code>node-stream-zip</code> seems to be the best Install: <code>npm install --save node-stream-zip
+</code> Usage: <code>'use strict';
+
+var fs = require('fs');
+var StreamZip = require('node-stream-zip');
+
+var zip = new StreamZip({
+ file: './example.zip'
+, storeEntries: true
+});
+
+zip.on('error', function (err) { console.error('[ERROR]', err); });
+
+zip.on('ready', function () {
+ console.log('All entries read: ' + zip.entriesCount);
+ //console.log(zip.entries());
+});
+
+zip.on('entry', function (entry) {
+ var pathname = path.resolve('./temp', entry.name);
+ if (/\.\./.test(path.relative('./temp', pathname))) {
+ console.warn("[zip warn]: ignoring maliciously crafted paths in zip file:", entry.name);
+ return;
+ }
+
+ if ('/' === entry.name[entry.name.length - 1]) {
+ console.log('[DIR]', entry.name);
+ return;
+ }
+
+ console.log('[FILE]', entry.name);
+ zip.stream(entry.name, function (err, stream) {
+ if (err) { console.error('Error:', err.toString()); return; }
+
+ stream.on('error', function (err) { console.log('[ERROR]', err); return; });
+
+ // example: print contents to screen
+ //stream.pipe(process.stdout);
+
+ // example: save contents to file
+ fs.mkdir(
+ path.dirname(pathname),
+ { recursive: true },
+ function (err) {
+ stream.pipe(fs.createWriteStream(pathname));
+ }
+ );
+ });
+});
+</code> Security Warning : Not sure if this checks <code>entry.name</code> for maliciously crafted paths that would resolve incorrectly (such as <code>../../../foo</code> or <code>/etc/passwd</code> ). You can easily check this yourself by comparing <code>/\.\./.test(path.relative('./to/dir', path.resolve('./to/dir', entry.name)))</code> . Pros : (Why do I think it's the best?) can unzip normal files (maybe not some crazy ones with weird extensions) can stream seems to not have to load the whole zip to read entries has examples in normal JavaScript (not compiled) doesn't include the kitchen sink (i.e. url loading, S3, or db layers) uses some existing code from a popular library doesn't have too much senseless hipster or ninja-foo in the code Cons : Swallows errors like a hungry hippo Throws strings instead of errors (no stack traces) <code>zip.extract()</code> doesn't seem to work (hence I used <code>zip.stream()</code> in my example) Runner up: node-unzipper Install: <code>npm install --save unzipper
+</code> Usage: <code>'use strict';
+
+var fs = require('fs');
+var unzipper = require('unzipper');
+
+fs.createReadStream('./example.zip')
+ .pipe(unzipper.Parse())
+ .on('entry', function (entry) {
+ var fileName = entry.path;
+ var type = entry.type; // 'Directory' or 'File'
+
+ console.log();
+ if (/\/$/.test(fileName)) {
+ console.log('[DIR]', fileName, type);
+ return;
+ }
+
+ console.log('[FILE]', fileName, type);
+
+ // TODO: probably also needs the security check
+
+ entry.pipe(process.stdout/*fs.createWriteStream('output/path')*/);
+ // NOTE: To ignore use entry.autodrain() instead of entry.pipe()
+ });
+</code> Pros : Seems to work in a similar manner to <code>node-stream-zip</code> , but less control A more functional fork of <code>unzip</code> Seems to run in serial rather than in parallel Cons : Kitchen sink much? Just includes a ton of stuff that's not related to unzipping Reads the whole file (by chunk, which is fine), not just random seeks
+
+Comments:
+- Is nobody else surprised that in 2019 there is no built-in function that allows you to extract a `.zip` into a given location?
+- I tried adm-zip and yauzl/yazl. yauzl/yazl supoort newer version of zip protocol and less buggy.
+- You might want to add that streaming a zip is technically an invalid use of a zip file. zip was made back in floppy disk days so there is an option to freshen/add new files to an existing zip. Let's say your zip had 3 files A,B,C. Instead of writing the entire zip pkzip just adds new A to the end of the file and then puts a new central directory at the end. So if you stream you'll get 2 A files one of them invalid.
+- mkdirp is undefined!
+- @Felipe Hooray! Almost 2021 and it is still painful to deal with zip files in node!
+- @RicardoGSaraiva Now it's `fs.mkdir(x, { recursive: true })`.
+- Re the comment about archiver, as of Jan 2021 it's still pack only (it does not unzip/unpack)
+- unzip cannot work on nodejs v12+, so please use unzipper instead
+- I highly recommend node-stream-zip with very straight forward usage in their new updated document: https://github.com/antelle/node-stream-zip when trying to extracting files (I have only tested this on Linux)
+- to avoid: "[ERROR] ReferenceError: path is not defined", just add this to the head: "const path = require('path');"
+- @JuliodeLeon It's 2023, it's still a mess. I just want to unzip a file, without memory leaks and keep the Linux file permissions.
+- "unzipit" package is the one I had the most success after comparing a few dozen alternatives.
+- yauzl seems to be abandoned as well. 4 years without updates and now it's also throwing a deprecation warning for the Buffer() constructor due to one of the dependencies becoming outdated.
+- "I would expect there to exist a fairly popular, mature node.js unzip library that is "stagnant" and "unmaintained" because it is "complete""
+Except that this ignores the fact that a) Node/javascript is evolving, e.g. with new module formats/packaging that improve tree-shaking, etc, and b) dependencies may be deprecated or identified as vulnerable and need updating/replacing. So even if the functionality is complete, a package that hasn't been updated in years is still likely to need ongoing maintenance.
+- @DavidG It can evolve to high heaven, that doesn't mean that old code should have to become more complicated as well. Simple, class-free, generator-free, weakmap-free, nonsense-free JavaScript that worked in 1997 still works today. And Buffer is still more performant and sane than Uint8Array (being someone who uses Uint8Array almost daily) - so no updates are needed. Certainly a zip library doesn't need any dependencies outside of the standard library. And tree shaking is a lie people tell at conferences to sound cool and get clout - just don't bloat the code with YAGNI in the first place.
+- @DavidG Software has always been complicated, for sure, but the web dev ecosystem is just out of control. On the one hand people are using C-library dependency managers (apt, yum) to manage their whole operating system. On the other hand people are rewriting code every 6 weeks with some new syntax - doing nothing more than breaking compatibility with older JS runtimes... and then using npm to manage their whole operating system. But it doesn't have to be that way. We *could* have nice things. Re: Jonathan Blow's 'Preventing the Collapse of Civilization'
+
+=======================
+
+--- Post Answer ---
+Edited version
+try this <code>const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const app = express();
+const port = 3000;
+
+// Middleware to handle raw data
+app.use('/uploadFile', (req, res, next) =&gt; {
+ let data = [];
+ req.on('data', chunk =&gt; {
+ data.push(chunk);
+ });
+ req.on('end', () =&gt; {
+ if (req.headers['content-length'] &gt; 10485760) { // 10 MB limit
+ res.status(413).send('File size exceeds limit');
+ return;
+ }
+ req.rawBody = Buffer.concat(data);
+ next();
+ });
+});
+
+app.post('/uploadFile', async (req, res) =&gt; {
+ const fileData = req.rawBody;
+ const originalFileName = req.headers['x-file-name'];
+ const fileName = path.basename(originalFileName); // Avoid path traversal
+ const fileExtension = path.extname(fileName).toLowerCase();
+
+ // Only allow certain file extensions
+ if (!['.png', '.jpg', '.jpeg', '.txt'].includes(fileExtension)) {
+ res.status(400).send('Invalid file type');
+ return;
+ }
+
+// do you own validation logics, my code is just to give an example.
+
+
+ const savePath = path.join(__dirname, 'uploads', fileName);
+
+ try {
+ if (!fs.existsSync(path.join(__dirname, 'uploads'))) {
+ fs.mkdirSync(path.join(__dirname, 'uploads'), { recursive: true });
+ }
+
+ fs.writeFileSync(savePath, fileData);
+ res.send({ message: "File uploaded successfully" });
+ } catch (error) {
+ res.status(500).send({ message: "Failed to upload file", error: error.message });
+ }
+});
+
+app.listen(port, () =&gt; {
+ console.log(`Server running on port ${port}`);
+});
+
+</code> How to call this from client @Colin There are many ways to call this, If you are using HTML <code>&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+&lt;head&gt;
+&lt;meta charset="UTF-8"&gt;
+&lt;title&gt;File Upload&lt;/title&gt;
+&lt;/head&gt;
+&lt;body&gt;
+&lt;input type="file" id="fileInput"&gt;
+&lt;button onclick="uploadFile()"&gt;Upload&lt;/button&gt;
+
+&lt;script&gt;
+function uploadFile() {
+ var fileInput = document.getElementById('fileInput');
+ var file = fileInput.files[0];
+ var xhr = new XMLHttpRequest();
+ xhr.open("POST", "[URL] true);
+ 
+ // Set appropriate headers
+ xhr.setRequestHeader("Content-Type", "application/octet-stream");
+ xhr.setRequestHeader("X-File-Name", file.name);
+ 
+ xhr.onload = function () {
+ if (xhr.status === 200) {
+ alert('File uploaded successfully');
+ } else {
+ alert('File upload failed');
+ }
+ };
+ 
+ xhr.send(file);
+}
+&lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+</code> if you are using curl <code>curl -X POST -H "X-File-Name: filename.jpg" --data-binary @/path/to/your/file.jpg [URL]
+</code>
+
+Comments:
+- Be careful with this code... there are significant potential security issues here.  You're allowing the user to specify the path they want to write to, which could be `../../../something-dangerous`... allowing them to traverse the whole file system, upload executables, overwrite configurations, etc.
+- How would I call this on the client, assuming the file is a property of an object?
+
+=======================
+
+--- Post Answer ---
+Here's a lower-level way to do it: fs.read(fd, buffer, offset, length, position, callback) using: <code>const fs = require('fs');
+
+// open file for reading, returns file descriptor
+const fd = fs.openSync('your-file.txt','r');
+
+function readOneCharFromFile(position, cb){
+
+ // only need to store one byte (one character)
+ const b = new Buffer(1);
+
+ fs.read(fd, b, 0, 1, position, function(err,bytesRead, buffer){
+ console.log('data =&gt; ', String(buffer));
+ cb(err,buffer);
+ });
+
+}
+</code> you will have to increment the position, as you read the file, but it will work. here's a quick example of how to read a whole file, character by character Just for fun I wrote this complete script to do it, just pass in a different file path, and it should work <code>const async = require('async');
+const fs = require('fs');
+const path = require('path');
+
+
+function read(fd, position, cb) {
+
+ let isByteRead = null;
+ let ret = new Buffer(0);
+
+ async.whilst(
+ function () {
+ return isByteRead !== false;
+ },
+ function (cb) {
+ readOneCharFromFile(fd, position++, function (err, bytesRead, buffer) {
+
+ if(err){
+ return cb(err);
+ }
+
+ isByteRead = !!bytesRead;
+ if(isByteRead){
+ ret = Buffer.concat([ret,buffer]);
+ }
+
+ cb(null);
+ });
+ },
+ function (err) {
+ cb(err, ret);
+ }
+ );
+
+}
+
+
+function readOneCharFromFile(fd, position, cb) {
+
+ // only need to store one byte (one character)
+ const b = new Buffer(1);
+ fs.read(fd, b, 0, 1, position, cb);
+
+}
+
+
+ /// use your own file here
+const file = path.resolve(__dirname + '/fixtures/abc.txt');
+const fd = fs.openSync(file, 'r');
+
+// start reading at position 0, position will be incremented
+read(fd, 0, function (err, data) {
+ if (err) {
+ console.error(err.stack || err);
+ }
+ else {
+ console.log('data =&gt; ', String(data));
+ }
+ fs.closeSync(fd);
+});
+</code> As you can see we increment the position integer every time we read the file. Hopefully the OS keeps the file in memory as we go. Using async.whilst() is OK, but I think for a more functional style it's better not to keep the state in the top of the function (ret and isByteRead). I will leave it as an exercise to the reader to implement this without using those stateful variables.
+
+Comments:
+- `fs.openSync` will read the whole file at once... this is the opposite of what OP wanted.
+- One character does not always equal one byte. Consider Chinese characters, for example.
+- No, the fs.openSync function in Node.js does not open the whole file at once. It is used to open a file and return a file descriptor synchronously. The file descriptor is a low-level representation of an open file, and it is typically used with other file system functions like fs.readSync or fs.writeSync to perform specific operations on the file.
+- Opening a file with fs.openSync does not read the entire file into memory. It simply provides a way to obtain a file descriptor that can be used for subsequent operations. If you need to read the contents of a file, you would use other functions like fs.readSync or fs.readFileSync, but keep in mind that these functions read a specified number of bytes or the entire file, depending on how you use them. It's still up to you to control the size of the data you read from the file.
+- @JohnDeighan you're correct that Chinese characters are typically encoded as 3 bytes per character. So we could rename the answer, read text 1-byte at a time instead of 1 character at a time
+
+=======================
+
+--- Post Answer ---
+You have to remove the <code>fs.statSync()</code> . That clogs up the event loop so your server gets stuck handling one request at a time every time you run that. And, as it turns out, you can just remove the call entirely because you've already called <code>fs.stat()</code> on the same file earlier in the function and can just use those results. I also added a couple return statements after sending errors since you don't want the rest of the code to execute after sending an error: <code>let flname = '../../..' + video.path;
+var file = path.resolve(__dirname, flname);
+fs.stat(file, function(err, stats) {
+ if (err) {
+ winston.error('/video/show/:id fs.stat error ',err);
+ if (err.code === 'ENOENT') {
+ // 404 Error if file not found
+ res.status(404).json({msg: 'log.n_request'});
+ return;
+ }
+ res.status(404).json({msg: 'log.n_request'});
+ return;
+ }
+ var range = req.headers.range;
+ if (!range) {
+ var header = {
+ 'Content-Length': stats.size,
+ 'Content-Type': (!req.useragent.isSafari ? token : 'mp4'),
+ }
+ res.writeHead(200, header)
+ var stream = fs.createReadStream(file)
+ .on("open", function () {
+ stream.pipe(res);
+ }).on("error", function (err) {
+ res.end(err);
+ });
+ }else{
+ var positions = range.replace(/bytes=/, "").split("-");
+ var start = parseInt(positions[0]);
+ if(isNaN(start)){
+ start = 0;
+ }
+ var total = stats.size;
+ var end = positions[1] ? parseInt(positions[1]) : (start+102400);
+ if(isNaN(end)){
+ end = start+102400;
+ }
+ if(total &lt;= end){
+ end = total-1;
+ }
+ var chunksize = (end - start) + 1;
+
+ res.writeHead(206, {
+ "Content-Range": "bytes " + start + "-" + end + "/" + total,
+ "Accept-Ranges": "bytes",
+ "Content-Length": chunksize,
+ "Content-Type": "video/mp4"
+ });
+
+ var stream = fs.createReadStream(file, {start: start, end: end})
+ .on("open", function () {
+ stream.pipe(res);
+ }).on("error", function (err) {
+ res.end(err);
+ });
+ }
+});
+</code>
+
+Comments:
+- does it affect cpu usage ? slow down entire node app ? if many users starts streaming
+- @Orgil - Synchronous file I/O clogs the event loop so your server gets stuck serving one user at a time rather than advancing many users at a time.  It just ruins scalability. It doesn't necessarily hog the CPU, it just stalls the event loop everytime you call `fs.statSync()`, nothing else can run while the interpreter is waiting for that to return.  If you use `fs.stat()` instead, then other requests can run while waiting for that to return.  This is a fundamental thing in node.js asynchronous design.
+- @Orgil - How many CPU cores in the server that you can use?  I asked because if you're doing lots of file I/O and have lots of cores, it might make sense to increase the file system thread pool size.  Internally, in native code the `fs` module uses a thread pool in libuv for the actual asynchronous file I/O.  That doesn't help if you're using synchronous file I/O, but might help once you get rid of blocking the event loop.  And, if you have any `fs.xxxxSync()` calls ANYWHERE else in your server, you need to systematically get rid of them all.
+- i have actually separated media server stream and uploading. but old videos are still streaming from the main server the main server has a 10 ghz 4 cores CPU, 16 gb memory, the new media server has (2ghz 2 cores) 2x CPU, 24gb memory, 2tb hard
+- and 1 more problem is im getting error in nginx log ( recv() failed (104: Connection reset by peer) while reading response header from upstream )  on the video stream api url   its related to nginx and server config i think but cant resolve
+
+=======================
+
+--- Post Answer ---
+I would leave the streaming to node or packages, unless you have specific processing that needs to be done. Just wrap the whole stream setup in a promise. If you also stream the request/response, it can be piped into the decompresser. Then <code>stdout</code> from the decompressor can be piped to the archive stream handlers. <code>import fs from 'fs'
+import { spawn } from 'child_process'
+import needle from 'needle'
+import tar from 'tar-stream'
+import archiver from 'archiver'
+
+export function tarLzToZip(url) {
+ return new Promise((resolve, reject) =&gt; {
+ // Setup streams
+ const res = needle.get(url)
+ const lzipProc = spawn('lzip', ['-dc'], { stdio: ['pipe','pipe',process.stderr] })
+ const tarExtract = tar.extract()
+ const zipPack = archiver('zip')
+ const writeFile = fs.createWriteStream('tardir.zip')
+
+ // Pipelines and processing
+ res.pipe(gzipProc.stdin)
+ lzipProc.stdout.pipe(tarExtract)
+ // tar -&gt; zip (simple file name)
+ tarExtract.on('entry', function(header, stream, next) {
+ console.log('entry', header)
+ zipPack.append(stream, { name: header.name })
+ stream.on('end', () =&gt; next())
+ })
+ tarExtract.on('finish', function() {
+ zipPack.finalize()
+ })
+ zipPack.pipe(writeFile)
+
+ // Handle the things
+ writeFile.on('error', reject)
+ writeFile.on('close', () =&gt; console.log('write close'))
+ writeFile.on('finish', resolve(true))
+ tarExtract.on('error', reject)
+ zipPack.on('error', reject)
+ zipPack.on('warning', reject)
+ lzipProc.on('error', reject)
+ lzipProc.on('exit', code =&gt; {if (code !== 0) reject(new Error(`lzip ${code}`))})
+ res.on('error', reject)
+ res.on('done', ()=&gt; console.log('request done', res.request.statusCode))
+ })
+}
+</code> You might want to be a bit more verbose about logging errors and stderr as the singular promise <code>reject</code> can easily hide what actually happened across the multiple streams.
+
+Comments:
+- Looks like a good general approach for the parts I haven't written yet, but as is this doesn't handle the lzip format. I could only find one Node lzip library, but it had no documentation at all, very few downloads, no source web site... needless to say I didn't trust it. I did, by the way, try `gzip -dc tzdb-2021a.tar.lz`, but just got the error message "gzip: tzdb-2021a.tar.lz: not in gzip format".
+- I might have commented too quickly, and should interpreted your code as something to re-interpret with the lzip command replacing your spawned gzip. I'll let you know how it goes. And thanks for the help so far. :)
+- Yeah sorry no `lzip` here to test. I'll edit
+- @kshetline is it `-dc` to stdout or is just `-d` ok?
+- Works like a charm! Thanks! I used just '-d' for the lzip options. After I flesh out all of the error handling and stuff, I'll post back the final code as an update to my question. One weird issue I have to deal with, that I know from previous use of tar-stream, is that tar-stream throws an error when it reaches the end of some of the archives I'm handling, even though the archives are valid, so I need to ignore errors sometimes.
+- I've now posted my updated code based on your solution.
+
+------------------------------------------------------------------------------
+--- Extractive POSecure  (compressed_contexts.json)
+------------------------------------------------------------------------------
+tokens: 961
+
+2017 26th ancient unzip node.js library libraries terrible commits unzip libraries read docs tried examples thejoshwolfe antelle-stream ZJONSSON EvanOxfeld Stuk kriskowal Update archiver Recommendation downloaded streaming documented-stream antelle best Install install node-stream-zip fs StreamZip-stream-zip storeEntries'ready entries read pathnameresolve/temp entry(path.relative console.warn ignoring maliciously crafted paths zip entry.name.log([DIR[FILE zip.stream.name.error( print contents screen save contents file.mkdir.pipe.createWriteStream(pathname Security Warning maliciously crafted paths(path.relative/dir.resolve entry Pros unzip files load zip examples JavaScript doesn't include kitchen sinkloading layers uses code library Swallows errors Throws strings errors stack traces.extract used.stream( node-unzipper unzipper fs unzipper.createReadStream.zip.Parse fileName type console.log security check.createWriteStream entry.autodrain( Pros-stream less control functional fork serial Cons unzipping Reads whole file no built-in function.zip location tried adm-zip yauzlyauzl newer zip protocol less buggy streaming invalid floppy files 3 files adds central directory 2 files invalid undefined 2021 painful zip.mkdir archiver 2021 pack only unzip unzip nodejs v12+ unzipper recommend node-stream-zip path 2023 mess unzip keep Linux permissions "unzipit package success yauzl abandoned 4 years deprecation warning Buffer() mature nodeunzip library ignores Node/javascript evolving dependencies functionality complete package maintenance old code complicated Simple class-free JavaScript 1997 Buffer performant Uint8Array no updates needed zip library dependencies standard tree shaking lie don bloat code YAGNI Software complicated web dev ecosystem out of control C-library dependency managers code compatibility JS npm Jonathan Blow 'Preventing Collapse Civilization Edited version express port datachunk.push.headers-length 10485760 10 MB limit size exceeds limit.rawBody Buffer/uploadFile async fileData originalFileName.headers fileName.basename Avoid path traversal fileExtension allow file extensions.png.jpg file type validation logics savePath.join.writeFileSync(savePath uploaded upload(port consoleport call client @Colin HTML lang="en Upload( uploadFile fileInput.getElementById xhr XMLHttpRequest.open Set headers.setRequestHeader/octet-stream-File.onload 200 alert uploaded failed.send curl -X POST -H-File-Name filename.jpg-binary.jpg security issues user specify path traverse file system upload executables overwrite configurationscall client file lower-level fs.read(fd buffer offset length position callback fs open file returns descriptor.openSync readOneCharFromFile store one byte Buffer(1).read(fd position example read file script different file path async fs path read(fd null ret new Buffer(0) readOneCharFromFile(fd readOneCharFromFile(fd store one byte b new Buffer(1)read(fd 0 1 position use file file path.resolve/fixtures/abc.txt fd fs.openSync(file start reading position 0 incremented read(fd.closeSync position OS keeps file memory async.whilst() not state top function reader without variables.openSync file character equal byte Chinese characters fs.openSync open file return descriptor descriptor used.openSync read entire file file descriptor operations other functions fs.readSync read bytes file control size data@JohnDeighan Chinese characters 3 bytes per rename answer read text 1-byte time remove.statSync( clogs event loop server one request remove call called.stat( results added return statements after errors flname video.path file path.resolve.stat(file 404 Error file not found range.headers.range-Length.size-Type.writeHead stream.createReadStream positions = range.replace start(positions 0 total stats.size end positions[1] start+102400 chunksize start + 1.writeHead-Range start- end total-Ranges-Length chunksize-Type/mp4 stream.createReadStream end cpu usage Synchronous file I/O clogs event loop ruins scalability stalls loop `fs.stat() requests node.js asynchronous design CPU cores increase thread pool size module thread pool asynchronous file I/Osynchronous I/O event loop.xxxxSync() calls separated server stream uploading old videos main 10 ghz 4 CPU 16 gb memory new (2ghz 2 cores CPU 24gb memory 2tb hard error nginx failed Connection reset video stream nginx leave streaming node packages processing stream setup request/response decompresser stream handlers fs tar tarLzToZip tarExtract(tarExtract zip.log zipPack.append(stream tarExtract'finish.finalize(writeFile writeFile reject'finish resolve(true tarExtract reject zipPack lzipProc reject Error res reject console.log logging errors hide approach doesn't handle lzip format Node lzip library no documentation few downloads source web trust tzdb-2021a.tar error messagenot gzip commented lzip command gzip help no `lzip test `-dc stdout `-d` Works used '-d lzip options error handling post final code error archives ignore errors posted updated code
+
+------------------------------------------------------------------------------
+--- Abstractive POSecure  (abstractive_contexts.json)
+------------------------------------------------------------------------------
+tokens: 260
+
+There is no explicit mention of security fixes in the original text. However, the discussion about using synchronous file I/O (`fs.openSync`) versus asynchronous file I/O (`fs.stat` and friends) mentions that synchronous file I/O can block the event loop and prevent other requests from being processed, which can be a scalability issue.
+
+To specifically address security concerns:
+
+* Using `needle.get(url)` to request the URL content is generally secure as long as you're using a trusted version of `needle`.
+* The use of `archiver` for generating ZIP archives doesn't inherently introduce any significant security risks.
+* However, it's essential to ensure that the extracted files are handled securely and properly sanitized before outputting or storing them. 
+
+In general, if you follow best practices for handling file system operations, input validation, and data sanitization, your application should be secure against common attacks such as:
+
+* Directory traversal attacks
+* Path manipulation attacks
+* Remote code execution (RCE)
+* Information disclosure
+
+But without more context about the error or potential vulnerabilities specifically mentioned in the above discussion or in other parts of the question text regarding "recv() failed (104: Connection reset by peer) while reading response header from upstream", it's difficult to accurately provide a concise summary of security fixes.
+
+------------------------------------------------------------------------------
+--- CVEfixes  (cvefixes_contexts.json)
+------------------------------------------------------------------------------
+tokens: 6329
+
+--- Related Vulnerability Pattern (CVE-2019-10765 | CWE: CWE-22) ---
+[VULNERABLE CODE]
+(function __construct () {
+        if (settings.port) {
+            server.app = express();
+
+            server.app.disable('x-powered-by');
+
+            // enable use of i-frames together with HTTPS
+            server.app.get('/*', (req, res, next) => {
+                res.header('X-Frame-Options', 'SAMEORIGIN');
+                next(); // http://expressjs.com/guide.html#passing-route control
+            });
+
+            if (settings.auth) {
+                session =           require('express-session');
+                cookieParser =      require('cookie-parser');
+                bodyParser =        require('body-parser');
+                AdapterStore =      require(utils.controllerDir + '/lib/session.js')(session, settings.ttl);
+                password =          require(utils.controllerDir + '/lib/password.js');
+                passport =          require('passport');
+                LocalStrategy =     require('passport-local').Strategy;
+                flash =             require('connect-flash'); // TODO report error to user
+
+                store = new AdapterStore({adapter: adapter});
+
+                passport.use(new LocalStrategy(
+                    (username, password, done) => {
+                        if (bruteForce[username] && bruteForce[username].errors > 4) {
+                            let minutes = (new Date().getTime() - bruteForce[username].time);
+                            if (bruteForce[username].errors < 7) {
+                                if ((new Date().getTime() - bruteForce[username].time) < 60000) {
+                                    minutes = 1;
+                                } else {
+                                    minutes = 0;
+                                }
+                            } else
+                            if (bruteForce[username].errors < 10) {
+                                if ((new Date().getTime() - bruteForce[username].time) < 180000) {
+                                    minutes = Math.ceil((180000 - minutes) / 60000);
+                                } else {
+                                    minutes = 0;
+                                }
+                            } else
+                            if (bruteForce[username].errors < 15) {
+                                if ((new Date().getTime() - bruteForce[username].time) < 600000) {
+                                    minutes = Math.ceil((600000 - minutes) / 60000);
+                                } else {
+                                    minutes = 0;
+                                }
+                            } else
+                            if ((new Date().getTime() - bruteForce[username].time) < 3600000) {
+                                minutes = Math.ceil((3600000 - minutes) / 60000);
+                            } else {
+                                minutes = 0;
+                            }
+
+                            if (minutes) {
+                                return done('Too many errors. Try again in ' + minutes + ' ' + (minutes === 1 ? 'minute' : 'minutes') + '.', false);
+                            }
+                        }
+                        adapter.checkPassword(username, password, res => {
+                            if (!res) {
+                                bruteForce[username] = bruteForce[username] || {errors: 0};
+                                bruteForce[username].time = new Date().getTime();
+                                bruteForce[username].errors++;
+                            } else if (bruteForce[username]) {
+                                delete bruteForce[username];
+                            }
+
+                            if (res) {
+                                return done(null, username);
+                            } else {
+                                return done(null, false);
+                            }
+                        });
+
+                    }
+                ));
+                passport.serializeUser((user, done) => done(null, user));
+
+                passport.deserializeUser((user, done) => done(null, user));
+
+                server.app.use(cookieParser());
+                server.app.use(bodyParser.urlencoded({
+                    extended: true
+                }));
+                server.app.use(bodyParser.json());
+                server.app.use(session({
+                    secret:             settings.secret,
+                    saveUninitialized:  true,
+                    resave:             true,
+                    cookie:             {
+                        maxAge: adapter.config.ttl * 1000
+                    },
+                    store:  store
+                }));
+                server.app.use(passport.initialize());
+                server.app.use(passport.session());
+                server.app.use(flash());
+
+                server.app.post('/login', (req, res, next) => {
+                    let redirect = '/';
+                    if (req.body.origin) {
+                        const parts = req.body.origin.match(/href=(.+)$/);
+                        if (parts && parts[1]) {
+                            redirect = decodeURIComponent(parts[1]);
+                        }
+                    }
+                    passport.authenticate('local', {
+                        successRedirect: redirect,
+                        failureRedirect: '/login/index.html' + req.body.origin + (req.body.origin ? '&error' : '?error'),
+                        failureFlash:    'Invalid username or password.'
+                    })(req, res, next);
+                });
+
+                server.app.get('/logout', (req, res) => {
+                    req.logout();
+                    res.redirect('/login/index.html');
+                });
+
+                server.app.get('/login/index.html', (req, res) => {
+                    loginPage = loginPage || prepareLoginTemplate();
+                    res.contentType('text/html');
+                    res.status(200).send(loginPage);
+                });
+
+                // route middleware to make sure a user is logged in
+                server.app.use((req, res, next) => {
+                    if (!req.isAuthenticated()) {
+                        if (/admin\.\d+\/login-bg\.png(\?.*)?$/.test(req.originalUrl)) {
+                            // Read names of files for gong
+                            adapter.objects.readFile(adapter.namespace, 'login-bg.png', null, (err, file) => {
+                                if (!err && file) {
+                                    res.set('Content-Type', 'image/png');
+                                    res.status(200).send(file);
+                                } else {
+                                   res.status(404).send();
+                                }
+                            });
+                        } else if (/^\/login\//.test(req.originalUrl) ||
+                                   /\.ico(\?.*)?$/.test(req.originalUrl)) {
+                            return next();
+                        } else {
+                            res.redirect('/login/index.html?href=' + encodeURIComponent(req.originalUrl));
+                        }
+                    } else {
+                        // special solution for socket.io
+                        if (socketIoFile !== false && (req.url.startsWith('socket.io.js') || req.url.match(/\/socket\.io\.js(\?.*)?$/))) {
+                            if (socketIoFile) {
+                                res.contentType('text/javascript');
+                                res.status(200).send(socketIoFile);
+                                return
+                            } else {
+                                try {
+                                    const dir = require.resolve('socket.io-client');
+                                    const fileDir = path.join(path.dirname(dir), '../dist/');
+                                    if (fs.existsSync(fileDir + 'socket.io.min.js')) {
+                                        socketIoFile = fs.readFileSync(fileDir + 'socket.io.min.js');
+                                    } else {
+                                        socketIoFile = fs.readFileSync(fileDir + 'socket.io.js');
+                                    }
+                                } catch (e) {
+                                    try {
+                                        socketIoFile = fs.readFileSync(path.join(__dirname, '../www/lib/js/socket.io.js'));
+                                    } catch (e) {
+                                        adapter.log.error('Cannot read socket.io.js: ' + e);
+                                        socketIoFile = false;
+                                    }
+                                }
+                                if (socketIoFile) {
+                                    res.contentType('text/javascript');
+                                    res.status(200).send(socketIoFile);
+                                    return
+                                }
+                            }
+                        }
+
+                        return next();
+                    }
+                });
+            } else {
+                server.app.get('/login', (req, res) => {
+                    res.redirect('/');
+                });
+                server.app.get('/logout', (req, res) => {
+                    res.redirect('/');
+                });
+            }
+
+            server.app.get('/zip/*', (req, res) => {
+                let parts = req.url.split('/');
+                let filename = parts.pop();
+
+                adapter.getBinaryState('system.host.' + adapter.host + '.zip.' + filename, (err, buff) => {
+                    if (err) {
+                        res.status(500).send(err);
+                    } else {
+                        if (!buff) {
+                            res.status(404).send('File package.zip not found');
+                        } else {
+                            // remove file
+                            adapter.delBinaryState && adapter.delBinaryState('system.host.' + adapter.host + '.zip.' + filename);
+                            res.set('Content-Type', 'application/zip');
+                            res.send(buff);
+                        }
+                    }
+                });
+            });
+
+            // send log files
+            server.app.get('/log/*', (req, res) => {
+                let parts = req.url.split('/');
+                parts = parts.splice(2);
+                const transport = parts.shift();
+                let filename = parts.join('/');
+                const config = adapter.systemConfig;
+                // detect file log
+                if (config && config.log && config.log.transport) {
+                    if (config.log.transport.hasOwnProperty(transport) && config.log.transport[transport].type === 'file') {
+                        if (config.log.transport[transport].filename) {
+                            parts = config.log.transport[transport].filename.replace(/\\/g, '/').split('/');
+                            parts.pop();
+                            filename = path.join(parts.join('/'), filename);
+                        } else {
+                            filename = path.join('log/', filename) ;
+                        }
+
+                        if (filename[0] !== '/' && !filename.match(/^\W:/)) {
+                            filename = path.normalize(__dirname + '/../../../') + filename;
+                        }
+
+                        if (fs.existsSync(filename)) {
+                            const stat = fs.lstatSync(filename);
+                            if (stat.size > 2 * 1024 * 1024) {
+                                res.sendFile(filename);
+                            } else {
+                                res.send(decorateLogFile(filename));
+                            }
+
+                            return;
+                        }
+                    }
+                }
+                res.status(404).send('File ' + filename + ' not found');
+            });
+            const appOptions = {};
+            if (settings.cache) {
+                appOptions.maxAge = 30758400000;
+            }
+
+            if (settings.tmpPathAllow && settings.tmpPath) {
+                server.app.use('/tmp/', express.static(settings.tmpPath, {maxAge: 0}));
+                fileUpload = fileUpload || require('express-fileupload');
+                server.app.use(fileUpload({
+                    useTempFiles: true,
+                    tempFilePath: settings.tmpPath
+                }));
+                server.app.post('/upload', (req, res) => {
+                    if (!req.files) {
+                        return res.status(400).send('No files were uploaded.');
+                    }
+
+                    // The name of the input field (i.e. "sampleFile") is used to retrieve the uploaded file
+                    let myFile;
+                    for (const name in req.files) {
+                        if (req.files.hasOwnProperty(name)) {
+                            myFile = req.files[name];
+                            break;
+                        }
+                    }
+
+                    if (myFile) {
+                        if (myFile.data && myFile.data.length > 600 * 1024 * 1024) {
+                            return res.status(500).send('File is too big. (Max 600MB)');
+                        }
+                        // Use the mv() method to place the file somewhere on your server
+                        myFile.mv(settings.tmpPath + '/restore.iob', err =>  {
+                            if (err) {
+                                res.status(500).send(err);
+                            } else {
+                                res.send('File uploaded!');
+                            }
+                        });
+                    } else {
+                        return res.status(500).send('File not uploaded');
+                    }
+                });
+            }
+
+            if (!fs.existsSync(__dirname + '/../www')) {
+                server.app.use('/', (req, res) => {
+                    res.send('This adapter cannot be installed directly from github.<br>You must install it from npm.<br>Write for that <i>"npm install iobroker.admin"</i> in according directory.');
+                });
+            } else {
+                server.app.use('/', express.static(__dirname + '/../www', appOptions));
+            }
+
+            // reverse proxy with url rewrite for couchdb attachments in <adapter-name>.admin
+            server.app.use('/adapter/', (req, res) => {
+
+                // Example: /example/?0
+                let url = req.url;
+
+                // add index.html
+                url = url.replace(/\/($|\?|#)/, '/index.html$1');
+
+                // Read config files for admin from /adapters/admin/admin/...
+                if (url.substring(0, '/' + adapter.name + '/'.length) === '/' + adapter.name + '/') {
+                    url = url.replace('/' + adapter.name + '/', __dirname + '/../admin/');
+                    url = url.replace(/\?[0-9]*/, '');
+
+                    try {
+                        if (fs.existsSync(url)) {
+                            fs.createReadStream(url).pipe(res);
+                        } else {
+                            const ss = new Stream();
+                            ss.pipe = dest => dest.write('File not found');
+
+                            ss.pipe(res);
+                        }
+                    } catch (e) {
+                        const s = new Stream();
+                        s.pipe = dest => dest.write('File not found: ' + e);
+
+                        s.pipe(res);
+                    }
+                    return;
+                }
+                url = url.split('/');
+                // Skip first /
+                url.shift();
+                // Get ID
+                const id = url.shift() + '.admin';
+                url = url.join('/');
+                const pos = url.indexOf('?');
+                if (pos !== -1) {
+                    url = url.substring(0, pos);
+                }
+                adapter.readFile(id, url, null, (err, buffer, mimeType) => {
+                    if (!buffer || err) {
+                        res.contentType('text/html');
+                        res.status(404).send('File ' + url + ' not found');
+                    } else {
+                        if (mimeType) {
+                            res.contentType(mimeType['content-type'] || mimeType);
+                        } else {
+                            res.contentType('text/javascript');
+                        }
+                        res.send(buffer);
+                    }
+                });
+            });
+
+            server.server = LE.createServer(server.app, settings, adapter.config.certificates, adapter.config.leConfig, adapter.log);
+            server.server.__server = server;
+        } else {
+            adapter.log.error('port missing');
+            adapter.terminate ? adapter.terminate('port missing', 1) : process.exit(1);
+        }
+
+        if (server.server) {
+            settings.port = parseInt(settings.port, 10);
+
+            adapter.getPort(settings.port, port => {
+                if (port !== settings.port && !adapter.config.findNextPort) {
+                    adapter.log.error('port ' + settings.port + ' already in use');
+                    adapter.terminate ? adapter.terminate('port ' + settings.port + ' already in use', 1) : process.exit(1);
+                }
+                server.server.listen(port, (!settings.bind || settings.bind === '0.0.0.0') ? undefined : settings.bind || undefined);
+
+                adapter.log.info('http' + (settings.secure ? 's' : '') + ' server listening on port ' + port);
+                adapter.log.info('Use link "http' + (settings.secure ? 's' : '') + '://localhost:' + port + '" to configure.');
+
+                if (typeof onReady === 'function') {
+                    onReady(server.server, store);
+                }
+            });
+        }
+
+        if (server.server) {
+            return server;
+        } else {
+            return null;
+        }
+    })();
+
+    return this;
+}
+
+[SECURE FIX]
+(function __construct () {
+        if (settings.port) {
+            server.app = express();
+
+            server.app.disable('x-powered-by');
+
+            // enable use of i-frames together with HTTPS
+            server.app.get('/*', (req, res, next) => {
+                res.header('X-Frame-Options', 'SAMEORIGIN');
+                next(); // http://expressjs.com/guide.html#passing-route control
+            });
+
+            if (settings.auth) {
+                session =           require('express-session');
+                cookieParser =      require('cookie-parser');
+                bodyParser =        require('body-parser');
+                AdapterStore =      require(utils.controllerDir + '/lib/session.js')(session, settings.ttl);
+                password =          require(utils.controllerDir + '/lib/password.js');
+                passport =          require('passport');
+                LocalStrategy =     require('passport-local').Strategy;
+                flash =             require('connect-flash'); // TODO report error to user
+
+                store = new AdapterStore({adapter: adapter});
+
+                passport.use(new LocalStrategy(
+                    (username, password, done) => {
+                        if (bruteForce[username] && bruteForce[username].errors > 4) {
+                            let minutes = (new Date().getTime() - bruteForce[username].time);
+                            if (bruteForce[username].errors < 7) {
+                                if ((new Date().getTime() - bruteForce[username].time) < 60000) {
+                                    minutes = 1;
+                                } else {
+                                    minutes = 0;
+                                }
+                            } else
+                            if (bruteForce[username].errors < 10) {
+                                if ((new Date().getTime() - bruteForce[username].time) < 180000) {
+                                    minutes = Math.ceil((180000 - minutes) / 60000);
+                                } else {
+                                    minutes = 0;
+                                }
+                            } else
+                            if (bruteForce[username].errors < 15) {
+                                if ((new Date().getTime() - bruteForce[username].time) < 600000) {
+                                    minutes = Math.ceil((600000 - minutes) / 60000);
+                                } else {
+                                    minutes = 0;
+                                }
+                            } else
+                            if ((new Date().getTime() - bruteForce[username].time) < 3600000) {
+                                minutes = Math.ceil((3600000 - minutes) / 60000);
+                            } else {
+                                minutes = 0;
+                            }
+
+                            if (minutes) {
+                                return done('Too many errors. Try again in ' + minutes + ' ' + (minutes === 1 ? 'minute' : 'minutes') + '.', false);
+                            }
+                        }
+                        adapter.checkPassword(username, password, res => {
+                            if (!res) {
+                                bruteForce[username] = bruteForce[username] || {errors: 0};
+                                bruteForce[username].time = new Date().getTime();
+                                bruteForce[username].errors++;
+                            } else if (bruteForce[username]) {
+                                delete bruteForce[username];
+                            }
+
+                            if (res) {
+                                return done(null, username);
+                            } else {
+                                return done(null, false);
+                            }
+                        });
+
+                    }
+                ));
+                passport.serializeUser((user, done) => done(null, user));
+
+                passport.deserializeUser((user, done) => done(null, user));
+
+                server.app.use(cookieParser());
+                server.app.use(bodyParser.urlencoded({
+                    extended: true
+                }));
+                server.app.use(bodyParser.json());
+                server.app.use(session({
+                    secret:             settings.secret,
+                    saveUninitialized:  true,
+                    resave:             true,
+                    cookie:             {
+                        maxAge: adapter.config.ttl * 1000
+                    },
+                    store:  store
+                }));
+                server.app.use(passport.initialize());
+                server.app.use(passport.session());
+                server.app.use(flash());
+
+                server.app.post('/login', (req, res, next) => {
+                    let redirect = '/';
+                    const origin = (req.body && req.body.origin) || '?href=%2F';
+                    if (origin) {
+                        const parts = origin.match(/href=(.+)$/);
+                        if (parts && parts[1]) {
+                            redirect = decodeURIComponent(parts[1]);
+                            // if some invalid characters in redirect
+                            if (redirect.match(/[^-_a-zA-Z0-9&%?.]/)) {
+                                redirect = '/';
+                            }
+                        }
+                    }
+                    req.body.password = ((req.body && req.body.password) || '').toString();
+                    req.body.username = ((req.body && req.body.username) || '').toString();
+
+                    passport.authenticate('local', {
+                        successRedirect: redirect,
+                        failureRedirect: '/login/index.html' + origin + (origin ? '&error' : '?error'),
+                        failureFlash:    'Invalid username or password.'
+                    })(req, res, next);
+                });
+
+                server.app.get('/logout', (req, res) => {
+                    req.logout();
+                    res.redirect('/login/index.html');
+                });
+
+                server.app.get('/login/index.html', (req, res) => {
+                    loginPage = loginPage || prepareLoginTemplate();
+                    res.contentType('text/html');
+                    res.status(200).send(loginPage);
+                });
+
+                // route middleware to make sure a user is logged in
+                server.app.use((req, res, next) => {
+                    if (!req.isAuthenticated()) {
+                        if (/admin\.\d+\/login-bg\.png(\?.*)?$/.test(req.originalUrl)) {
+                            // Read names of files for gong
+                            adapter.objects.readFile(adapter.namespace, 'login-bg.png', null, (err, file) => {
+                                if (!err && file) {
+                                    res.set('Content-Type', 'image/png');
+                                    res.status(200).send(file);
+                                } else {
+                                   res.status(404).send();
+                                }
+                            });
+                        } else if (/^\/login\//.test(req.originalUrl) ||
+                                   /\.ico(\?.*)?$/.test(req.originalUrl)) {
+                            return next();
+                        } else {
+                            res.redirect('/login/index.html?href=' + encodeURIComponent(req.originalUrl));
+                        }
+                    } else {
+                        // special solution for socket.io
+                        if (socketIoFile !== false && (req.url.startsWith('socket.io.js') || req.url.match(/\/socket\.io\.js(\?.*)?$/))) {
+                            if (socketIoFile) {
+                                res.contentType('text/javascript');
+                                res.status(200).send(socketIoFile);
+                                return
+                            } else {
+                                try {
+                                    const dir = require.resolve('socket.io-client');
+                                    const fileDir = path.join(path.dirname(dir), '../dist/');
+                                    if (fs.existsSync(fileDir + 'socket.io.min.js')) {
+                                        socketIoFile = fs.readFileSync(fileDir + 'socket.io.min.js');
+                                    } else {
+                                        socketIoFile = fs.readFileSync(fileDir + 'socket.io.js');
+                                    }
+                                } catch (e) {
+                                    try {
+                                        socketIoFile = fs.readFileSync(path.join(__dirname, '../www/lib/js/socket.io.js'));
+                                    } catch (e) {
+                                        adapter.log.error('Cannot read socket.io.js: ' + e);
+                                        socketIoFile = false;
+                                    }
+                                }
+                                if (socketIoFile) {
+                                    res.contentType('text/javascript');
+                                    res.status(200).send(socketIoFile);
+                                    return
+                                }
+                            }
+                        }
+
+                        return next();
+                    }
+                });
+            } else {
+                server.app.get('/login', (req, res) => {
+                    res.redirect('/');
+                });
+                server.app.get('/logout', (req, res) => {
+                    res.redirect('/');
+                });
+            }
+
+            server.app.get('/zip/*', (req, res) => {
+                let parts = req.url.split('/');
+                let filename = parts.pop();
+
+                adapter.getBinaryState('system.host.' + adapter.host + '.zip.' + filename, (err, buff) => {
+                    if (err) {
+                        res.status(500).send(escapeHtml(typeof err === 'string' ? err : JSON.stringify(err)));
+                    } else {
+                        if (!buff) {
+                            res.status(404).send('File package.zip not found');
+                        } else {
+                            // remove file
+                            adapter.delBinaryState && adapter.delBinaryState('system.host.' + adapter.host + '.zip.' + filename);
+                            res.set('Content-Type', 'application/zip');
+                            res.send(buff);
+                        }
+                    }
+                });
+            });
+
+            // send log files
+            server.app.get('/log/*', (req, res) => {
+                let parts = decodeURIComponent(req.url).split('/');
+                parts = parts.splice(2);
+                const transport = parts.shift();
+                let filename = parts.join('/');
+                const config = adapter.systemConfig;
+                // detect file log
+                if (config && config.log && config.log.transport) {
+                    if (config.log.transport.hasOwnProperty(transport) && config.log.transport[transport].type === 'file') {
+                        let logFolder;
+                        if (config.log.transport[transport].filename) {
+                            parts = config.log.transport[transport].filename.replace(/\\/g, '/').split('/');
+                            parts.pop();
+                            logFolder = path.normalize(parts.join('/'));
+                        } else {
+                            logFolder = path.join(process.cwd(), 'log');
+                        }
+
+                        if (logFolder[0] !== '/' && logFolder[0] !== '\\' && !logFolder.match(/^[a-zA-Z]:/)) {
+                            logFolder = path.normalize(path.join(__dirname + '/../../../', logFolder));
+                        }
+
+                        filename = path.normalize(path.join(logFolder, filename));
+
+                        if (filename.startsWith(logFolder) && fs.existsSync(filename)) {
+                            const stat = fs.lstatSync(filename);
+                            if (stat.size > 2 * 1024 * 1024) {
+                                res.sendFile(filename);
+                            } else {
+                                res.send(decorateLogFile(filename));
+                            }
+
+                            return;
+                        }
+                    }
+                }
+                res.status(404).send('File ' + escapeHtml(filename) + ' not found');
+            });
+            const appOptions = {};
+            if (settings.cache) {
+                appOptions.maxAge = 30758400000;
+            }
+
+            if (settings.tmpPathAllow && settings.tmpPath) {
+                server.app.use('/tmp/', express.static(settings.tmpPath, {maxAge: 0}));
+                fileUpload = fileUpload || require('express-fileupload');
+                server.app.use(fileUpload({
+                    useTempFiles: true,
+                    tempFileDir: settings.tmpPath
+                }));
+                server.app.post('/upload', (req, res) => {
+                    if (!req.files) {
+                        return res.status(400).send('No files were uploaded.');
+                    }
+
+                    // The name of the input field (i.e. "sampleFile") is used to retrieve the uploaded file
+                    let myFile;
+                    // take first non empty file
+                    for (const name in req.files) {
+                        if (req.files.hasOwnProperty(name)) {
+                            myFile = req.files[name];
+                            break;
+                        }
+                    }
+
+                    if (myFile) {
+                        if (myFile.data && myFile.data.length > 600 * 1024 * 1024) {
+                            return res.status(500).send('File is too big. (Max 600MB)');
+                        }
+                        // Use the mv() method to place the file somewhere on your server
+                        myFile.mv(settings.tmpPath + '/restore.iob', err =>  {
+                            if (err) {
+                                res.status(500).send(escapeHtml(typeof err === 'string' ? err : JSON.stringify(err)));
+                            } else {
+                                res.send('File uploaded!');
+                            }
+                        });
+                    } else {
+                        return res.status(500).send('File not uploaded');
+                    }
+                });
+            }
+
+            if (!fs.existsSync(__dirname + '/../www')) {
+                server.app.use('/', (req, res) => {
+                    res.send('This adapter cannot be installed directly from github.<br>You must install it from npm.<br>Write for that <i>"npm install iobroker.admin"</i> in according directory.');
+                });
+            } else {
+                server.app.use('/', express.static(__dirname + '/../www', appOptions));
+            }
+
+            // reverse proxy with url rewrite for couchdb attachments in <adapter-name>.admin
+            server.app.use('/adapter/', (req, res) => {
+                // Example: /example/?0
+                let url = req.url;
+
+                // add index.html
+                url = url.replace(/\/($|\?|#)/, '/index.html$1');
+
+                // Read config files for admin from /adapters/admin/admin/...
+                if (url.substring(0, '/' + adapter.name + '/'.length) === '/' + adapter.name + '/') {
+                    url = url.replace('/' + adapter.name + '/', __dirname + '/../admin/');
+                    url = url.replace(/\?[0-9]*/, '');
+
+                    try {
+                        if (fs.existsSync(url)) {
+                            fs.createReadStream(url).pipe(res);
+                        } else {
+                            const ss = new Stream();
+                            ss.pipe = dest => dest.write('File not found');
+
+                            ss.pipe(res);
+                        }
+                    } catch (e) {
+                        const s = new Stream();
+                        s.pipe = dest => dest.write('File not found: ' + e);
+
+                        s.pipe(res);
+                    }
+                    return;
+                }
+                url = url.split('/');
+                // Skip first /
+                url.shift();
+                // Get ID
+                const id = url.shift() + '.admin';
+                url = url.join('/');
+                const pos = url.indexOf('?');
+                if (pos !== -1) {
+                    url = url.substring(0, pos);
+                }
+                adapter.readFile(id, url, null, (err, buffer, mimeType) => {
+                    if (!buffer || err) {
+                        res.contentType('text/html');
+                        res.status(404).send('File ' + escapeHtml(url) + ' not found');
+                    } else {
+                        if (mimeType) {
+                            res.contentType(mimeType['content-type'] || mimeType);
+                        } else {
+                            res.contentType('text/javascript');
+                        }
+                        res.send(buffer);
+                    }
+                });
+            });
+
+            server.server = LE.createServer(server.app, settings, adapter.config.certificates, adapter.config.leConfig, adapter.log);
+            server.server.__server = server;
+        } else {
+            adapter.log.error('port missing');
+            adapter.terminate ? adapter.terminate('port missing', 1) : process.exit(1);
+        }
+
+        if (server.server) {
+            settings.port = parseInt(settings.port, 10);
+
+            adapter.getPort(settings.port, port => {
+                if (port !== settings.port && !adapter.config.findNextPort) {
+                    adapter.log.error('port ' + settings.port + ' already in use');
+                    adapter.terminate ? adapter.terminate('port ' + settings.port + ' already in use', 1) : process.exit(1);
+                }
+                server.server.listen(port, (!settings.bind || settings.bind === '0.0.0.0') ? undefined : settings.bind || undefined);
+
+                adapter.log.info('http' + (settings.secure ? 's' : '') + ' server listening on port ' + port);
+                adapter.log.info('Use link "http' + (settings.secure ? 's' : '') + '://localhost:' + port + '" to configure.');
+
+                if (typeof onReady === 'function') {
+                    onReady(server.server, store);
+                }
+            });
+        }
+
+        if (server.server) {
+            return server;
+        } else {
+            return null;
+        }
+    })();
+
+    return this;
+}
+
+==============================================================================
+[5] FINAL PROMPTS SENT TO THE MODEL
+==============================================================================
+
+------------------------------------------------------------------------------
+--- PROMPT: No RAG   (1067 tokens)
+------------------------------------------------------------------------------
+Given the following code:
+
+function handleZipFileUpload ({ file }: Request, res: Response, next: NextFunction) {
+  if (utils.endsWith(file?.originalname.toLowerCase(), '.zip')) {
+    if (((file?.buffer) != null) && utils.isChallengeEnabled(challenges.fileWriteChallenge)) {
+      const buffer = file.buffer
+      const filename = file.originalname.toLowerCase()
+      const tempFile = path.join(os.tmpdir(), filename)
+      fs.open(tempFile, 'w', function (err, fd) {
+        if (err != null) { next(err) }
+        fs.write(fd, buffer, 0, buffer.length, null, function (err) {
+          if (err != null) { next(err) }
+          fs.close(fd, function () {
+            fs.createReadStream(tempFile)
+              .pipe(unzipper.Parse())
+              .on('entry', function (entry: any) {
+                const fileName = entry.path
+                const absolutePath = path.resolve('uploads/complaints/' + fileName)
+                challengeUtils.solveIf(challenges.fileWriteChallenge, () => { return absolutePath === path.resolve('ftp/legal.md') })
+                if (absolutePath.includes(path.resolve('.'))) {
+                  entry.pipe(fs.createWriteStream('uploads/complaints/' + fileName).on('error', function (err) { next(err) }))
+                } else {
+                  entry.autodrain()
+                }
+              }).on('error', function (err: unknown) { next(err) })
+          })
+        })
+      })
+    }
+    res.status(204).end()
+  } else {
+    next()
+  }
+}
+
+Below are the EXACT type signatures and contracts for the libraries and local modules imported in this file. 
+STRICTLY ADHERE to these definitions to prevent compilation errors. Do not hallucinate parameters or methods that do not exist in these signatures:
+---
+[LIBRARY SIGNATURES (Type-Aware Context)]
+// Origin of Import: os
+declare const os: typeof import("node:os");
+
+// Origin of Import: fs
+declare const fs: typeof import("node:fs");
+
+// Origin of Import: path
+declare const path: PlatformPath;
+
+// Origin of Import: unzipper
+declare const unzipper: typeof import("/home/ubuntu/so-vuln-repair/juice-shop/node_modules/@types/unzipper/index");
+
+// Origin of Import: NextFunction
+declare const NextFunction: any;
+
+// Origin of Import: Request
+declare const Request: any;
+
+// Origin of Import: Response
+declare const Response: any;
+
+// Origin of Import: challenges
+declare const challenges: Record<ChallengeKey, ChallengeModel>;
+
+declare namespace utils {
+  export const isChallengeEnabled: (challenge: Challenge) => boolean;
+  export const endsWith: (str?: string | undefined, suffix?: string | undefined) => boolean;
+}
+
+
+---
+**Instructions:**
+- Review the code for potential security flaws.
+- If security issues are found, modify the code minimally to fix the issue while maintaining its original functionality and logic.
+- If no security issues are found, output "No security issues found".
+- KEEP THE EXACT SAME FUNCTION SIGNATURE (input arguments, return type and name).
+- RETURN ONLY THE CODE. No markdown, no explanation.
+
+**STRICT COMPILATION & FRAMEWORK RULES (CRITICAL):**
+1. NO NEW IMPORTS: You are modifying an isolated function block. DO NOT invoke external libraries (like DOMPurify, Joi, xss, etc.) or RxJS operators (`of`, `throwError`) unless they are ALREADY defined in the [LIBRARY SIGNATURES]. 
+2. CLASS METHOD PRESERVATION: If the provided code is a class method (e.g., `methodName(...) { ... }`), return it EXACTLY as a class method. DO NOT prepend the `function` keyword or convert it to an arrow function property.
+3. TYPESCRIPT STRICT ERRORS: In `catch (error)` blocks, assume `error` is of type `unknown`. You MUST typecast it (e.g., `if (error instanceof Error) { ... }`) before accessing properties like `.message`.
+4. NO MODERN ES2022 ERROR CAUSES: DO NOT use the { cause: error } object when instantiating Errors (e.g., do not write `new Error(msg, { cause: err })`). Strictly use the standard `new Error(msg)`.
+5. STRICT TYPE PRESERVATION: Do not change the original nullability of variables or return types. Do not reassign variables declared with `const`.
+6. ANGULAR SANITIZER AWARENESS: If you use Angular's `this.sanitizer.sanitize()`, it strictly requires TWO arguments (SecurityContext and the value). If context is unavailable, use standard JS regex/type-checking to prevent XSS.
+7. ENVIRONMENT ISOLATION: Do not mix browser modules with Node.js modules. If the code uses Angular injections (like `this.router`), DO NOT use Node.js native modules like `crypto.createHash()`.
+8. MUST MATCH THE TYPE CONTEXT: When calling external libraries or local modules, strictly use the arguments and types defined in the provided Type Context.
+
+
+------------------------------------------------------------------------------
+--- PROMPT: SOSecure   (6230 tokens)
+------------------------------------------------------------------------------
+Given the following code:
+
+function handleZipFileUpload ({ file }: Request, res: Response, next: NextFunction) {
+  if (utils.endsWith(file?.originalname.toLowerCase(), '.zip')) {
+    if (((file?.buffer) != null) && utils.isChallengeEnabled(challenges.fileWriteChallenge)) {
+      const buffer = file.buffer
+      const filename = file.originalname.toLowerCase()
+      const tempFile = path.join(os.tmpdir(), filename)
+      fs.open(tempFile, 'w', function (err, fd) {
+        if (err != null) { next(err) }
+        fs.write(fd, buffer, 0, buffer.length, null, function (err) {
+          if (err != null) { next(err) }
+          fs.close(fd, function () {
+            fs.createReadStream(tempFile)
+              .pipe(unzipper.Parse())
+              .on('entry', function (entry: any) {
+                const fileName = entry.path
+                const absolutePath = path.resolve('uploads/complaints/' + fileName)
+                challengeUtils.solveIf(challenges.fileWriteChallenge, () => { return absolutePath === path.resolve('ftp/legal.md') })
+                if (absolutePath.includes(path.resolve('.'))) {
+                  entry.pipe(fs.createWriteStream('uploads/complaints/' + fileName).on('error', function (err) { next(err) }))
+                } else {
+                  entry.autodrain()
+                }
+              }).on('error', function (err: unknown) { next(err) })
+          })
+        })
+      })
+    }
+    res.status(204).end()
+  } else {
+    next()
+  }
+}
+
+Below are the EXACT type signatures and contracts for the libraries and local modules imported in this file. 
+STRICTLY ADHERE to these definitions to prevent compilation errors. Do not hallucinate parameters or methods that do not exist in these signatures:
+---
+[LIBRARY SIGNATURES (Type-Aware Context)]
+// Origin of Import: os
+declare const os: typeof import("node:os");
+
+// Origin of Import: fs
+declare const fs: typeof import("node:fs");
+
+// Origin of Import: path
+declare const path: PlatformPath;
+
+// Origin of Import: unzipper
+declare const unzipper: typeof import("/home/ubuntu/so-vuln-repair/juice-shop/node_modules/@types/unzipper/index");
+
+// Origin of Import: NextFunction
+declare const NextFunction: any;
+
+// Origin of Import: Request
+declare const Request: any;
+
+// Origin of Import: Response
+declare const Response: any;
+
+// Origin of Import: challenges
+declare const challenges: Record<ChallengeKey, ChallengeModel>;
+
+declare namespace utils {
+  export const isChallengeEnabled: (challenge: Challenge) => boolean;
+  export const endsWith: (str?: string | undefined, suffix?: string | undefined) => boolean;
+}
+
+
+---
+
+Does this code have any security vulnerabilities? Below is a related StackOverflow additional context that may be helpful:
+---
+--- Post Answer ---
+It's 2017 (October 26th, to be exact). For an ancient and pervasive technology such as unzip I would expect there to exist a fairly popular, mature node.js unzip library that is "stagnant" and "unmaintained" because it is "complete". However, most libraries appear either to be completely terrible or to have commits recently as just a few months ago. This is quite concerning... so I've gone through several unzip libraries, read their docs, and tried their examples to try to figure out WTF. For example, I've tried these: thejoshwolfe/ <code>yauzl</code> antelle/ <code>node-stream-zip</code> ZJONSSON/ <code>node-unzipper</code> EvanOxfeld/ <code>node-unzip</code> Stuk/ <code>jszip</code> kriskowal/ <code>zip</code> Update 2020: Haven't tried it yet, but there's also archiver Top Recommendation: <code>yauzl</code> Works great for completely downloaded file. Not as great for streaming. Well documented. Works well. Makes sense. 2nd Pick: <code>node-stream-zip</code> antelle's <code>node-stream-zip</code> seems to be the best Install: <code>npm install --save node-stream-zip
+</code> Usage: <code>'use strict';
+
+var fs = require('fs');
+var StreamZip = require('node-stream-zip');
+
+var zip = new StreamZip({
+ file: './example.zip'
+, storeEntries: true
+});
+
+zip.on('error', function (err) { console.error('[ERROR]', err); });
+
+zip.on('ready', function () {
+ console.log('All entries read: ' + zip.entriesCount);
+ //console.log(zip.entries());
+});
+
+zip.on('entry', function (entry) {
+ var pathname = path.resolve('./temp', entry.name);
+ if (/\.\./.test(path.relative('./temp', pathname))) {
+ console.warn("[zip warn]: ignoring maliciously crafted paths in zip file:", entry.name);
+ return;
+ }
+
+ if ('/' === entry.name[entry.name.length - 1]) {
+ console.log('[DIR]', entry.name);
+ return;
+ }
+
+ console.log('[FILE]', entry.name);
+ zip.stream(entry.name, function (err, stream) {
+ if (err) { console.error('Error:', err.toString()); return; }
+
+ stream.on('error', function (err) { console.log('[ERROR]', err); return; });
+
+ // example: print contents to screen
+ //stream.pipe(process.stdout);
+
+ // example: save contents to file
+ fs.mkdir(
+ path.dirname(pathname),
+ { recursive: true },
+ function (err) {
+ stream.pipe(fs.createWriteStream(pathname));
+ }
+ );
+ });
+});
+</code> Security Warning : Not sure if this checks <code>entry.name</code> for maliciously crafted paths that would resolve incorrectly (such as <code>../../../foo</code> or <code>/etc/passwd</code> ). You can easily check this yourself by comparing <code>/\.\./.test(path.relative('./to/dir', path.resolve('./to/dir', entry.name)))</code> . Pros : (Why do I think it's the best?) can unzip normal files (maybe not some crazy ones with weird extensions) can stream seems to not have to load the whole zip to read entries has examples in normal JavaScript (not compiled) doesn't include the kitchen sink (i.e. url loading, S3, or db layers) uses some existing code from a popular library doesn't have too much senseless hipster or ninja-foo in the code Cons : Swallows errors like a hungry hippo Throws strings instead of errors (no stack traces) <code>zip.extract()</code> doesn't seem to work (hence I used <code>zip.stream()</code> in my example) Runner up: node-unzipper Install: <code>npm install --save unzipper
+</code> Usage: <code>'use strict';
+
+var fs = require('fs');
+var unzipper = require('unzipper');
+
+fs.createReadStream('./example.zip')
+ .pipe(unzipper.Parse())
+ .on('entry', function (entry) {
+ var fileName = entry.path;
+ var type = entry.type; // 'Directory' or 'File'
+
+ console.log();
+ if (/\/$/.test(fileName)) {
+ console.log('[DIR]', fileName, type);
+ return;
+ }
+
+ console.log('[FILE]', fileName, type);
+
+ // TODO: probably also needs the security check
+
+ entry.pipe(process.stdout/*fs.createWriteStream('output/path')*/);
+ // NOTE: To ignore use entry.autodrain() instead of entry.pipe()
+ });
+</code> Pros : Seems to work in a similar manner to <code>node-stream-zip</code> , but less control A more functional fork of <code>unzip</code> Seems to run in serial rather than in parallel Cons : Kitchen sink much? Just includes a ton of stuff that's not related to unzipping Reads the whole file (by chunk, which is fine), not just random seeks
+
+Comments:
+- Is nobody else surprised that in 2019 there is no built-in function that allows you to extract a `.zip` into a given location?
+- I tried adm-zip and yauzl/yazl. yauzl/yazl supoort newer version of zip protocol and less buggy.
+- You might want to add that streaming a zip is technically an invalid use of a zip file. zip was made back in floppy disk days so there is an option to freshen/add new files to an existing zip. Let's say your zip had 3 files A,B,C. Instead of writing the entire zip pkzip just adds new A to the end of the file and then puts a new central directory at the end. So if you stream you'll get 2 A files one of them invalid.
+- mkdirp is undefined!
+- @Felipe Hooray! Almost 2021 and it is still painful to deal with zip files in node!
+- @RicardoGSaraiva Now it's `fs.mkdir(x, { recursive: true })`.
+- Re the comment about archiver, as of Jan 2021 it's still pack only (it does not unzip/unpack)
+- unzip cannot work on nodejs v12+, so please use unzipper instead
+- I highly recommend node-stream-zip with very straight forward usage in their new updated document: https://github.com/antelle/node-stream-zip when trying to extracting files (I have only tested this on Linux)
+- to avoid: "[ERROR] ReferenceError: path is not defined", just add this to the head: "const path = require('path');"
+- @JuliodeLeon It's 2023, it's still a mess. I just want to unzip a file, without memory leaks and keep the Linux file permissions.
+- "unzipit" package is the one I had the most success after comparing a few dozen alternatives.
+- yauzl seems to be abandoned as well. 4 years without updates and now it's also throwing a deprecation warning for the Buffer() constructor due to one of the dependencies becoming outdated.
+- "I would expect there to exist a fairly popular, mature node.js unzip library that is "stagnant" and "unmaintained" because it is "complete""
+Except that this ignores the fact that a) Node/javascript is evolving, e.g. with new module formats/packaging that improve tree-shaking, etc, and b) dependencies may be deprecated or identified as vulnerable and need updating/replacing. So even if the functionality is complete, a package that hasn't been updated in years is still likely to need ongoing maintenance.
+- @DavidG It can evolve to high heaven, that doesn't mean that old code should have to become more complicated as well. Simple, class-free, generator-free, weakmap-free, nonsense-free JavaScript that worked in 1997 still works today. And Buffer is still more performant and sane than Uint8Array (being someone who uses Uint8Array almost daily) - so no updates are needed. Certainly a zip library doesn't need any dependencies outside of the standard library. And tree shaking is a lie people tell at conferences to sound cool and get clout - just don't bloat the code with YAGNI in the first place.
+- @DavidG Software has always been complicated, for sure, but the web dev ecosystem is just out of control. On the one hand people are using C-library dependency managers (apt, yum) to manage their whole operating system. On the other hand people are rewriting code every 6 weeks with some new syntax - doing nothing more than breaking compatibility with older JS runtimes... and then using npm to manage their whole operating system. But it doesn't have to be that way. We *could* have nice things. Re: Jonathan Blow's 'Preventing the Collapse of Civilization'
+
+=======================
+
+--- Post Answer ---
+Edited version
+try this <code>const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const app = express();
+const port = 3000;
+
+// Middleware to handle raw data
+app.use('/uploadFile', (req, res, next) =&gt; {
+ let data = [];
+ req.on('data', chunk =&gt; {
+ data.push(chunk);
+ });
+ req.on('end', () =&gt; {
+ if (req.headers['content-length'] &gt; 10485760) { // 10 MB limit
+ res.status(413).send('File size exceeds limit');
+ return;
+ }
+ req.rawBody = Buffer.concat(data);
+ next();
+ });
+});
+
+app.post('/uploadFile', async (req, res) =&gt; {
+ const fileData = req.rawBody;
+ const originalFileName = req.headers['x-file-name'];
+ const fileName = path.basename(originalFileName); // Avoid path traversal
+ const fileExtension = path.extname(fileName).toLowerCase();
+
+ // Only allow certain file extensions
+ if (!['.png', '.jpg', '.jpeg', '.txt'].includes(fileExtension)) {
+ res.status(400).send('Invalid file type');
+ return;
+ }
+
+// do you own validation logics, my code is just to give an example.
+
+
+ const savePath = path.join(__dirname, 'uploads', fileName);
+
+ try {
+ if (!fs.existsSync(path.join(__dirname, 'uploads'))) {
+ fs.mkdirSync(path.join(__dirname, 'uploads'), { recursive: true });
+ }
+
+ fs.writeFileSync(savePath, fileData);
+ res.send({ message: "File uploaded successfully" });
+ } catch (error) {
+ res.status(500).send({ message: "Failed to upload file", error: error.message });
+ }
+});
+
+app.listen(port, () =&gt; {
+ console.log(`Server running on port ${port}`);
+});
+
+</code> How to call this from client @Colin There are many ways to call this, If you are using HTML <code>&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+&lt;head&gt;
+&lt;meta charset="UTF-8"&gt;
+&lt;title&gt;File Upload&lt;/title&gt;
+&lt;/head&gt;
+&lt;body&gt;
+&lt;input type="file" id="fileInput"&gt;
+&lt;button onclick="uploadFile()"&gt;Upload&lt;/button&gt;
+
+&lt;script&gt;
+function uploadFile() {
+ var fileInput = document.getElementById('fileInput');
+ var file = fileInput.files[0];
+ var xhr = new XMLHttpRequest();
+ xhr.open("POST", "[URL] true);
+ 
+ // Set appropriate headers
+ xhr.setRequestHeader("Content-Type", "application/octet-stream");
+ xhr.setRequestHeader("X-File-Name", file.name);
+ 
+ xhr.onload = function () {
+ if (xhr.status === 200) {
+ alert('File uploaded successfully');
+ } else {
+ alert('File upload failed');
+ }
+ };
+ 
+ xhr.send(file);
+}
+&lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+</code> if you are using curl <code>curl -X POST -H "X-File-Name: filename.jpg" --data-binary @/path/to/your/file.jpg [URL]
+</code>
+
+Comments:
+- Be careful with this code... there are significant potential security issues here.  You're allowing the user to specify the path they want to write to, which could be `../../../something-dangerous`... allowing them to traverse the whole file system, upload executables, overwrite configurations, etc.
+- How would I call this on the client, assuming the file is a property of an object?
+
+=======================
+
+--- Post Answer ---
+Here's a lower-level way to do it: fs.read(fd, buffer, offset, length, position, callback) using: <code>const fs = require('fs');
+
+// open file for reading, returns file descriptor
+const fd = fs.openSync('your-file.txt','r');
+
+function readOneCharFromFile(position, cb){
+
+ // only need to store one byte (one character)
+ const b = new Buffer(1);
+
+ fs.read(fd, b, 0, 1, position, function(err,bytesRead, buffer){
+ console.log('data =&gt; ', String(buffer));
+ cb(err,buffer);
+ });
+
+}
+</code> you will have to increment the position, as you read the file, but it will work. here's a quick example of how to read a whole file, character by character Just for fun I wrote this complete script to do it, just pass in a different file path, and it should work <code>const async = require('async');
+const fs = require('fs');
+const path = require('path');
+
+
+function read(fd, position, cb) {
+
+ let isByteRead = null;
+ let ret = new Buffer(0);
+
+ async.whilst(
+ function () {
+ return isByteRead !== false;
+ },
+ function (cb) {
+ readOneCharFromFile(fd, position++, function (err, bytesRead, buffer) {
+
+ if(err){
+ return cb(err);
+ }
+
+ isByteRead = !!bytesRead;
+ if(isByteRead){
+ ret = Buffer.concat([ret,buffer]);
+ }
+
+ cb(null);
+ });
+ },
+ function (err) {
+ cb(err, ret);
+ }
+ );
+
+}
+
+
+function readOneCharFromFile(fd, position, cb) {
+
+ // only need to store one byte (one character)
+ const b = new Buffer(1);
+ fs.read(fd, b, 0, 1, position, cb);
+
+}
+
+
+ /// use your own file here
+const file = path.resolve(__dirname + '/fixtures/abc.txt');
+const fd = fs.openSync(file, 'r');
+
+// start reading at position 0, position will be incremented
+read(fd, 0, function (err, data) {
+ if (err) {
+ console.error(err.stack || err);
+ }
+ else {
+ console.log('data =&gt; ', String(data));
+ }
+ fs.closeSync(fd);
+});
+</code> As you can see we increment the position integer every time we read the file. Hopefully the OS keeps the file in memory as we go. Using async.whilst() is OK, but I think for a more functional style it's better not to keep the state in the top of the function (ret and isByteRead). I will leave it as an exercise to the reader to implement this without using those stateful variables.
+
+Comments:
+- `fs.openSync` will read the whole file at once... this is the opposite of what OP wanted.
+- One character does not always equal one byte. Consider Chinese characters, for example.
+- No, the fs.openSync function in Node.js does not open the whole file at once. It is used to open a file and return a file descriptor synchronously. The file descriptor is a low-level representation of an open file, and it is typically used with other file system functions like fs.readSync or fs.writeSync to perform specific operations on the file.
+- Opening a file with fs.openSync does not read the entire file into memory. It simply provides a way to obtain a file descriptor that can be used for subsequent operations. If you need to read the contents of a file, you would use other functions like fs.readSync or fs.readFileSync, but keep in mind that these functions read a specified number of bytes or the entire file, depending on how you use them. It's still up to you to control the size of the data you read from the file.
+- @JohnDeighan you're correct that Chinese characters are typically encoded as 3 bytes per character. So we could rename the answer, read text 1-byte at a time instead of 1 character at a time
+
+=======================
+
+--- Post Answer ---
+You have to remove the <code>fs.statSync()</code> . That clogs up the event loop so your server gets stuck handling one request at a time every time you run that. And, as it turns out, you can just remove the call entirely because you've already called <code>fs.stat()</code> on the same file earlier in the function and can just use those results. I also added a couple return statements after sending errors since you don't want the rest of the code to execute after sending an error: <code>let flname = '../../..' + video.path;
+var file = path.resolve(__dirname, flname);
+fs.stat(file, function(err, stats) {
+ if (err) {
+ winston.error('/video/show/:id fs.stat error ',err);
+ if (err.code === 'ENOENT') {
+ // 404 Error if file not found
+ res.status(404).json({msg: 'log.n_request'});
+ return;
+ }
+ res.status(404).json({msg: 'log.n_request'});
+ return;
+ }
+ var range = req.headers.range;
+ if (!range) {
+ var header = {
+ 'Content-Length': stats.size,
+ 'Content-Type': (!req.useragent.isSafari ? token : 'mp4'),
+ }
+ res.writeHead(200, header)
+ var stream = fs.createReadStream(file)
+ .on("open", function () {
+ stream.pipe(res);
+ }).on("error", function (err) {
+ res.end(err);
+ });
+ }else{
+ var positions = range.replace(/bytes=/, "").split("-");
+ var start = parseInt(positions[0]);
+ if(isNaN(start)){
+ start = 0;
+ }
+ var total = stats.size;
+ var end = positions[1] ? parseInt(positions[1]) : (start+102400);
+ if(isNaN(end)){
+ end = start+102400;
+ }
+ if(total &lt;= end){
+ end = total-1;
+ }
+ var chunksize = (end - start) + 1;
+
+ res.writeHead(206, {
+ "Content-Range": "bytes " + start + "-" + end + "/" + total,
+ "Accept-Ranges": "bytes",
+ "Content-Length": chunksize,
+ "Content-Type": "video/mp4"
+ });
+
+ var stream = fs.createReadStream(file, {start: start, end: end})
+ .on("open", function () {
+ stream.pipe(res);
+ }).on("error", function (err) {
+ res.end(err);
+ });
+ }
+});
+</code>
+
+Comments:
+- does it affect cpu usage ? slow down entire node app ? if many users starts streaming
+- @Orgil - Synchronous file I/O clogs the event loop so your server gets stuck serving one user at a time rather than advancing many users at a time.  It just ruins scalability. It doesn't necessarily hog the CPU, it just stalls the event loop everytime you call `fs.statSync()`, nothing else can run while the interpreter is waiting for that to return.  If you use `fs.stat()` instead, then other requests can run while waiting for that to return.  This is a fundamental thing in node.js asynchronous design.
+- @Orgil - How many CPU cores in the server that you can use?  I asked because if you're doing lots of file I/O and have lots of cores, it might make sense to increase the file system thread pool size.  Internally, in native code the `fs` module uses a thread pool in libuv for the actual asynchronous file I/O.  That doesn't help if you're using synchronous file I/O, but might help once you get rid of blocking the event loop.  And, if you have any `fs.xxxxSync()` calls ANYWHERE else in your server, you need to systematically get rid of them all.
+- i have actually separated media server stream and uploading. but old videos are still streaming from the main server the main server has a 10 ghz 4 cores CPU, 16 gb memory, the new media server has (2ghz 2 cores) 2x CPU, 24gb memory, 2tb hard
+- and 1 more problem is im getting error in nginx log ( recv() failed (104: Connection reset by peer) while reading response header from upstream )  on the video stream api url   its related to nginx and server config i think but cant resolve
+
+=======================
+
+--- Post Answer ---
+I would leave the streaming to node or packages, unless you have specific processing that needs to be done. Just wrap the whole stream setup in a promise. If you also stream the request/response, it can be piped into the decompresser. Then <code>stdout</code> from the decompressor can be piped to the archive stream handlers. <code>import fs from 'fs'
+import { spawn } from 'child_process'
+import needle from 'needle'
+import tar from 'tar-stream'
+import archiver from 'archiver'
+
+export function tarLzToZip(url) {
+ return new Promise((resolve, reject) =&gt; {
+ // Setup streams
+ const res = needle.get(url)
+ const lzipProc = spawn('lzip', ['-dc'], { stdio: ['pipe','pipe',process.stderr] })
+ const tarExtract = tar.extract()
+ const zipPack = archiver('zip')
+ const writeFile = fs.createWriteStream('tardir.zip')
+
+ // Pipelines and processing
+ res.pipe(gzipProc.stdin)
+ lzipProc.stdout.pipe(tarExtract)
+ // tar -&gt; zip (simple file name)
+ tarExtract.on('entry', function(header, stream, next) {
+ console.log('entry', header)
+ zipPack.append(stream, { name: header.name })
+ stream.on('end', () =&gt; next())
+ })
+ tarExtract.on('finish', function() {
+ zipPack.finalize()
+ })
+ zipPack.pipe(writeFile)
+
+ // Handle the things
+ writeFile.on('error', reject)
+ writeFile.on('close', () =&gt; console.log('write close'))
+ writeFile.on('finish', resolve(true))
+ tarExtract.on('error', reject)
+ zipPack.on('error', reject)
+ zipPack.on('warning', reject)
+ lzipProc.on('error', reject)
+ lzipProc.on('exit', code =&gt; {if (code !== 0) reject(new Error(`lzip ${code}`))})
+ res.on('error', reject)
+ res.on('done', ()=&gt; console.log('request done', res.request.statusCode))
+ })
+}
+</code> You might want to be a bit more verbose about logging errors and stderr as the singular promise <code>reject</code> can easily hide what actually happened across the multiple streams.
+
+Comments:
+- Looks like a good general approach for the parts I haven't written yet, but as is this doesn't handle the lzip format. I could only find one Node lzip library, but it had no documentation at all, very few downloads, no source web site... needless to say I didn't trust it. I did, by the way, try `gzip -dc tzdb-2021a.tar.lz`, but just got the error message "gzip: tzdb-2021a.tar.lz: not in gzip format".
+- I might have commented too quickly, and should interpreted your code as something to re-interpret with the lzip command replacing your spawned gzip. I'll let you know how it goes. And thanks for the help so far. :)
+- Yeah sorry no `lzip` here to test. I'll edit
+- @kshetline is it `-dc` to stdout or is just `-d` ok?
+- Works like a charm! Thanks! I used just '-d' for the lzip options. After I flesh out all of the error handling and stuff, I'll post back the final code as an update to my question. One weird issue I have to deal with, that I know from previous use of tar-stream, is that tar-stream throws an error when it reaches the end of some of the archives I'm handling, even though the archives are valid, so I need to ignore errors sometimes.
+- I've now posted my updated code based on your solution.
+---
+
+**Instructions:**
+- Review the code for any security flaws.
+- If the code has security issues, modify the code to follow best security practices while ensuring the original functionality and logic are maintained.
+- If no security issues are found, output "No security issues found".
+- Ensure that the fixes do not alter the original intent of the code.
+- KEEP THE EXACT SAME FUNCTION SIGNATURE (input arguments, return type and name).
+- RETURN ONLY THE CODE. No markdown, no explanation.
+- It is imperative that the new code should not have any CWE or CVE security errors.
+
+**STRICT COMPILATION & FRAMEWORK RULES (CRITICAL):**
+1. NO NEW IMPORTS: You are modifying an isolated function block. DO NOT invoke external libraries (like DOMPurify, Joi, xss, etc.) or RxJS operators (`of`, `throwError`) unless they are ALREADY defined in the [LIBRARY SIGNATURES]. 
+2. CLASS METHOD PRESERVATION: If the provided code is a class method (e.g., `methodName(...) { ... }`), return it EXACTLY as a class method. DO NOT prepend the `function` keyword or convert it to an arrow function property.
+3. TYPESCRIPT STRICT ERRORS: In `catch (error)` blocks, assume `error` is of type `unknown`. You MUST typecast it (e.g., `if (error instanceof Error) { ... }`) before accessing properties like `.message`.
+4. NO MODERN ES2022 ERROR CAUSES: DO NOT use the { cause: error } object when instantiating Errors (e.g., do not write `new Error(msg, { cause: err })`). Strictly use the standard `new Error(msg)`.
+5. STRICT TYPE PRESERVATION: Do not change the original nullability of variables or return types. Do not reassign variables declared with `const`.
+6. ANGULAR SANITIZER AWARENESS: If you use Angular's `this.sanitizer.sanitize()`, it strictly requires TWO arguments (SecurityContext and the value). If context is unavailable, use standard JS regex/type-checking to prevent XSS.
+7. ENVIRONMENT ISOLATION: Do not mix browser modules with Node.js modules. If the code uses Angular injections (like `this.router`), DO NOT use Node.js native modules like `crypto.createHash()`.
+8. MUST MATCH THE TYPE CONTEXT: When calling external libraries or local modules, strictly use the arguments and types defined in the provided Type Context.
+
+
+------------------------------------------------------------------------------
+--- PROMPT: Extractive POSecure   (2116 tokens)
+------------------------------------------------------------------------------
+Given the following code:
+
+function handleZipFileUpload ({ file }: Request, res: Response, next: NextFunction) {
+  if (utils.endsWith(file?.originalname.toLowerCase(), '.zip')) {
+    if (((file?.buffer) != null) && utils.isChallengeEnabled(challenges.fileWriteChallenge)) {
+      const buffer = file.buffer
+      const filename = file.originalname.toLowerCase()
+      const tempFile = path.join(os.tmpdir(), filename)
+      fs.open(tempFile, 'w', function (err, fd) {
+        if (err != null) { next(err) }
+        fs.write(fd, buffer, 0, buffer.length, null, function (err) {
+          if (err != null) { next(err) }
+          fs.close(fd, function () {
+            fs.createReadStream(tempFile)
+              .pipe(unzipper.Parse())
+              .on('entry', function (entry: any) {
+                const fileName = entry.path
+                const absolutePath = path.resolve('uploads/complaints/' + fileName)
+                challengeUtils.solveIf(challenges.fileWriteChallenge, () => { return absolutePath === path.resolve('ftp/legal.md') })
+                if (absolutePath.includes(path.resolve('.'))) {
+                  entry.pipe(fs.createWriteStream('uploads/complaints/' + fileName).on('error', function (err) { next(err) }))
+                } else {
+                  entry.autodrain()
+                }
+              }).on('error', function (err: unknown) { next(err) })
+          })
+        })
+      })
+    }
+    res.status(204).end()
+  } else {
+    next()
+  }
+}
+
+Does this code have any security vulnerabilities? 
+Below is a related StackOverflow additional context that may be helpful:
+---
+2017 26th ancient unzip node.js library libraries terrible commits unzip libraries read docs tried examples thejoshwolfe antelle-stream ZJONSSON EvanOxfeld Stuk kriskowal Update archiver Recommendation downloaded streaming documented-stream antelle best Install install node-stream-zip fs StreamZip-stream-zip storeEntries'ready entries read pathnameresolve/temp entry(path.relative console.warn ignoring maliciously crafted paths zip entry.name.log([DIR[FILE zip.stream.name.error( print contents screen save contents file.mkdir.pipe.createWriteStream(pathname Security Warning maliciously crafted paths(path.relative/dir.resolve entry Pros unzip files load zip examples JavaScript doesn't include kitchen sinkloading layers uses code library Swallows errors Throws strings errors stack traces.extract used.stream( node-unzipper unzipper fs unzipper.createReadStream.zip.Parse fileName type console.log security check.createWriteStream entry.autodrain( Pros-stream less control functional fork serial Cons unzipping Reads whole file no built-in function.zip location tried adm-zip yauzlyauzl newer zip protocol less buggy streaming invalid floppy files 3 files adds central directory 2 files invalid undefined 2021 painful zip.mkdir archiver 2021 pack only unzip unzip nodejs v12+ unzipper recommend node-stream-zip path 2023 mess unzip keep Linux permissions "unzipit package success yauzl abandoned 4 years deprecation warning Buffer() mature nodeunzip library ignores Node/javascript evolving dependencies functionality complete package maintenance old code complicated Simple class-free JavaScript 1997 Buffer performant Uint8Array no updates needed zip library dependencies standard tree shaking lie don bloat code YAGNI Software complicated web dev ecosystem out of control C-library dependency managers code compatibility JS npm Jonathan Blow 'Preventing Collapse Civilization Edited version express port datachunk.push.headers-length 10485760 10 MB limit size exceeds limit.rawBody Buffer/uploadFile async fileData originalFileName.headers fileName.basename Avoid path traversal fileExtension allow file extensions.png.jpg file type validation logics savePath.join.writeFileSync(savePath uploaded upload(port consoleport call client @Colin HTML lang="en Upload( uploadFile fileInput.getElementById xhr XMLHttpRequest.open Set headers.setRequestHeader/octet-stream-File.onload 200 alert uploaded failed.send curl -X POST -H-File-Name filename.jpg-binary.jpg security issues user specify path traverse file system upload executables overwrite configurationscall client file lower-level fs.read(fd buffer offset length position callback fs open file returns descriptor.openSync readOneCharFromFile store one byte Buffer(1).read(fd position example read file script different file path async fs path read(fd null ret new Buffer(0) readOneCharFromFile(fd readOneCharFromFile(fd store one byte b new Buffer(1)read(fd 0 1 position use file file path.resolve/fixtures/abc.txt fd fs.openSync(file start reading position 0 incremented read(fd.closeSync position OS keeps file memory async.whilst() not state top function reader without variables.openSync file character equal byte Chinese characters fs.openSync open file return descriptor descriptor used.openSync read entire file file descriptor operations other functions fs.readSync read bytes file control size data@JohnDeighan Chinese characters 3 bytes per rename answer read text 1-byte time remove.statSync( clogs event loop server one request remove call called.stat( results added return statements after errors flname video.path file path.resolve.stat(file 404 Error file not found range.headers.range-Length.size-Type.writeHead stream.createReadStream positions = range.replace start(positions 0 total stats.size end positions[1] start+102400 chunksize start + 1.writeHead-Range start- end total-Ranges-Length chunksize-Type/mp4 stream.createReadStream end cpu usage Synchronous file I/O clogs event loop ruins scalability stalls loop `fs.stat() requests node.js asynchronous design CPU cores increase thread pool size module thread pool asynchronous file I/Osynchronous I/O event loop.xxxxSync() calls separated server stream uploading old videos main 10 ghz 4 CPU 16 gb memory new (2ghz 2 cores CPU 24gb memory 2tb hard error nginx failed Connection reset video stream nginx leave streaming node packages processing stream setup request/response decompresser stream handlers fs tar tarLzToZip tarExtract(tarExtract zip.log zipPack.append(stream tarExtract'finish.finalize(writeFile writeFile reject'finish resolve(true tarExtract reject zipPack lzipProc reject Error res reject console.log logging errors hide approach doesn't handle lzip format Node lzip library no documentation few downloads source web trust tzdb-2021a.tar error messagenot gzip commented lzip command gzip help no `lzip test `-dc stdout `-d` Works used '-d lzip options error handling post final code error archives ignore errors posted updated code
+---
+
+
+Below are the EXACT type signatures and contracts for the libraries and local modules imported in this file. 
+STRICTLY ADHERE to these definitions to prevent compilation errors. Do not hallucinate parameters or methods that do not exist in these signatures:
+---
+[LIBRARY SIGNATURES (Type-Aware Context)]
+// Origin of Import: os
+declare const os: typeof import("node:os");
+
+// Origin of Import: fs
+declare const fs: typeof import("node:fs");
+
+// Origin of Import: path
+declare const path: PlatformPath;
+
+// Origin of Import: unzipper
+declare const unzipper: typeof import("/home/ubuntu/so-vuln-repair/juice-shop/node_modules/@types/unzipper/index");
+
+// Origin of Import: NextFunction
+declare const NextFunction: any;
+
+// Origin of Import: Request
+declare const Request: any;
+
+// Origin of Import: Response
+declare const Response: any;
+
+// Origin of Import: challenges
+declare const challenges: Record<ChallengeKey, ChallengeModel>;
+
+declare namespace utils {
+  export const isChallengeEnabled: (challenge: Challenge) => boolean;
+  export const endsWith: (str?: string | undefined, suffix?: string | undefined) => boolean;
+}
+
+
+---
+**Instructions:**
+- Review the code for any security flaws.
+- If the code has security issues, modify the code to follow best security practices while ensuring the original functionality and logic are maintained.
+- If no security issues are found, output "No security issues found".
+- Ensure that the fixes do not alter the original intent of the code.
+- KEEP THE EXACT SAME FUNCTION SIGNATURE (input arguments, return type and name).
+- MUST MATCH THE TYPE CONTEXT: When calling external libraries or local modules, strictly use the arguments and types defined in the provided Type Context.
+- RETURN ONLY THE CODE. No markdown, no explanation.
+- It is imperative that the new code should not have any CWE or CVE security errors.
+
+**STRICT COMPILATION & FRAMEWORK RULES (CRITICAL):**
+1. NO NEW IMPORTS: You are modifying an isolated function block. DO NOT invoke external libraries (like DOMPurify, Joi, xss, etc.) or RxJS operators (`of`, `throwError`) unless they are ALREADY defined in the [LIBRARY SIGNATURES]. 
+2. CLASS METHOD PRESERVATION: If the provided code is a class method (e.g., `methodName(...) { ... }`), return it EXACTLY as a class method. DO NOT prepend the `function` keyword or convert it to an arrow function property.
+3. TYPESCRIPT STRICT ERRORS: In `catch (error)` blocks, assume `error` is of type `unknown`. You MUST typecast it (e.g., `if (error instanceof Error) { ... }`) before accessing properties like `.message`.
+4. NO MODERN ES2022 ERROR CAUSES: DO NOT use the { cause: error } object when instantiating Errors (e.g., do not write `new Error(msg, { cause: err })`). Strictly use the standard `new Error(msg)`.
+5. STRICT TYPE PRESERVATION: Do not change the original nullability of variables or return types. Do not reassign variables declared with `const`.
+6. ANGULAR SANITIZER AWARENESS: If you use Angular's `this.sanitizer.sanitize()`, it strictly requires TWO arguments (SecurityContext and the value). If context is unavailable, use standard JS regex/type-checking to prevent XSS.
+7. ENVIRONMENT ISOLATION: Do not mix browser modules with Node.js modules. If the code uses Angular injections (like `this.router`), DO NOT use Node.js native modules like `crypto.createHash()`.
+8. MUST MATCH THE TYPE CONTEXT: When calling external libraries or local modules, strictly use the arguments and types defined in the provided Type Context.
+
+
+------------------------------------------------------------------------------
+--- PROMPT: Abstractive POSecure   (1414 tokens)
+------------------------------------------------------------------------------
+Given the following code:
+
+function handleZipFileUpload ({ file }: Request, res: Response, next: NextFunction) {
+  if (utils.endsWith(file?.originalname.toLowerCase(), '.zip')) {
+    if (((file?.buffer) != null) && utils.isChallengeEnabled(challenges.fileWriteChallenge)) {
+      const buffer = file.buffer
+      const filename = file.originalname.toLowerCase()
+      const tempFile = path.join(os.tmpdir(), filename)
+      fs.open(tempFile, 'w', function (err, fd) {
+        if (err != null) { next(err) }
+        fs.write(fd, buffer, 0, buffer.length, null, function (err) {
+          if (err != null) { next(err) }
+          fs.close(fd, function () {
+            fs.createReadStream(tempFile)
+              .pipe(unzipper.Parse())
+              .on('entry', function (entry: any) {
+                const fileName = entry.path
+                const absolutePath = path.resolve('uploads/complaints/' + fileName)
+                challengeUtils.solveIf(challenges.fileWriteChallenge, () => { return absolutePath === path.resolve('ftp/legal.md') })
+                if (absolutePath.includes(path.resolve('.'))) {
+                  entry.pipe(fs.createWriteStream('uploads/complaints/' + fileName).on('error', function (err) { next(err) }))
+                } else {
+                  entry.autodrain()
+                }
+              }).on('error', function (err: unknown) { next(err) })
+          })
+        })
+      })
+    }
+    res.status(204).end()
+  } else {
+    next()
+  }
+}
+
+Does this code have any security vulnerabilities? 
+Below is a related StackOverflow additional context that may be helpful:
+---
+There is no explicit mention of security fixes in the original text. However, the discussion about using synchronous file I/O (`fs.openSync`) versus asynchronous file I/O (`fs.stat` and friends) mentions that synchronous file I/O can block the event loop and prevent other requests from being processed, which can be a scalability issue.
+
+To specifically address security concerns:
+
+* Using `needle.get(url)` to request the URL content is generally secure as long as you're using a trusted version of `needle`.
+* The use of `archiver` for generating ZIP archives doesn't inherently introduce any significant security risks.
+* However, it's essential to ensure that the extracted files are handled securely and properly sanitized before outputting or storing them. 
+
+In general, if you follow best practices for handling file system operations, input validation, and data sanitization, your application should be secure against common attacks such as:
+
+* Directory traversal attacks
+* Path manipulation attacks
+* Remote code execution (RCE)
+* Information disclosure
+
+But without more context about the error or potential vulnerabilities specifically mentioned in the above discussion or in other parts of the question text regarding "recv() failed (104: Connection reset by peer) while reading response header from upstream", it's difficult to accurately provide a concise summary of security fixes.
+---
+
+
+Below are the EXACT type signatures and contracts for the libraries and local modules imported in this file. 
+STRICTLY ADHERE to these definitions to prevent compilation errors. Do not hallucinate parameters or methods that do not exist in these signatures:
+---
+[LIBRARY SIGNATURES (Type-Aware Context)]
+// Origin of Import: os
+declare const os: typeof import("node:os");
+
+// Origin of Import: fs
+declare const fs: typeof import("node:fs");
+
+// Origin of Import: path
+declare const path: PlatformPath;
+
+// Origin of Import: unzipper
+declare const unzipper: typeof import("/home/ubuntu/so-vuln-repair/juice-shop/node_modules/@types/unzipper/index");
+
+// Origin of Import: NextFunction
+declare const NextFunction: any;
+
+// Origin of Import: Request
+declare const Request: any;
+
+// Origin of Import: Response
+declare const Response: any;
+
+// Origin of Import: challenges
+declare const challenges: Record<ChallengeKey, ChallengeModel>;
+
+declare namespace utils {
+  export const isChallengeEnabled: (challenge: Challenge) => boolean;
+  export const endsWith: (str?: string | undefined, suffix?: string | undefined) => boolean;
+}
+
+
+---
+**Instructions:**
+- Review the code for any security flaws.
+- If the code has security issues, modify the code to follow best security practices while ensuring the original functionality and logic are maintained.
+- If no security issues are found, output "No security issues found".
+- Ensure that the fixes do not alter the original intent of the code.
+- KEEP THE EXACT SAME FUNCTION SIGNATURE (input arguments, return type and name).
+- MUST MATCH THE TYPE CONTEXT: When calling external libraries or local modules, strictly use the arguments and types defined in the provided Type Context.
+- RETURN ONLY THE CODE. No markdown, no explanation.
+- It is imperative that the new code should not have any CWE or CVE security errors.
+
+**STRICT COMPILATION & FRAMEWORK RULES (CRITICAL):**
+1. NO NEW IMPORTS: You are modifying an isolated function block. DO NOT invoke external libraries (like DOMPurify, Joi, xss, etc.) or RxJS operators (`of`, `throwError`) unless they are ALREADY defined in the [LIBRARY SIGNATURES]. 
+2. CLASS METHOD PRESERVATION: If the provided code is a class method (e.g., `methodName(...) { ... }`), return it EXACTLY as a class method. DO NOT prepend the `function` keyword or convert it to an arrow function property.
+3. TYPESCRIPT STRICT ERRORS: In `catch (error)` blocks, assume `error` is of type `unknown`. You MUST typecast it (e.g., `if (error instanceof Error) { ... }`) before accessing properties like `.message`.
+4. NO MODERN ES2022 ERROR CAUSES: DO NOT use the { cause: error } object when instantiating Errors (e.g., do not write `new Error(msg, { cause: err })`). Strictly use the standard `new Error(msg)`.
+5. STRICT TYPE PRESERVATION: Do not change the original nullability of variables or return types. Do not reassign variables declared with `const`.
+6. ANGULAR SANITIZER AWARENESS: If you use Angular's `this.sanitizer.sanitize()`, it strictly requires TWO arguments (SecurityContext and the value). If context is unavailable, use standard JS regex/type-checking to prevent XSS.
+7. ENVIRONMENT ISOLATION: Do not mix browser modules with Node.js modules. If the code uses Angular injections (like `this.router`), DO NOT use Node.js native modules like `crypto.createHash()`.
+8. MUST MATCH THE TYPE CONTEXT: When calling external libraries or local modules, strictly use the arguments and types defined in the provided Type Context.
+
+
+------------------------------------------------------------------------------
+--- PROMPT: CVEfixes   (7496 tokens)
+------------------------------------------------------------------------------
+Given the following code:
+
+function handleZipFileUpload ({ file }: Request, res: Response, next: NextFunction) {
+  if (utils.endsWith(file?.originalname.toLowerCase(), '.zip')) {
+    if (((file?.buffer) != null) && utils.isChallengeEnabled(challenges.fileWriteChallenge)) {
+      const buffer = file.buffer
+      const filename = file.originalname.toLowerCase()
+      const tempFile = path.join(os.tmpdir(), filename)
+      fs.open(tempFile, 'w', function (err, fd) {
+        if (err != null) { next(err) }
+        fs.write(fd, buffer, 0, buffer.length, null, function (err) {
+          if (err != null) { next(err) }
+          fs.close(fd, function () {
+            fs.createReadStream(tempFile)
+              .pipe(unzipper.Parse())
+              .on('entry', function (entry: any) {
+                const fileName = entry.path
+                const absolutePath = path.resolve('uploads/complaints/' + fileName)
+                challengeUtils.solveIf(challenges.fileWriteChallenge, () => { return absolutePath === path.resolve('ftp/legal.md') })
+                if (absolutePath.includes(path.resolve('.'))) {
+                  entry.pipe(fs.createWriteStream('uploads/complaints/' + fileName).on('error', function (err) { next(err) }))
+                } else {
+                  entry.autodrain()
+                }
+              }).on('error', function (err: unknown) { next(err) })
+          })
+        })
+      })
+    }
+    res.status(204).end()
+  } else {
+    next()
+  }
+}
+
+Does this code have any security vulnerabilities? 
+Below are related real-world vulnerability patterns (CVEs) and their secure fixes that may be helpful as a reference for your correction:
+---
+--- Related Vulnerability Pattern (CVE-2019-10765 | CWE: CWE-22) ---
+[VULNERABLE CODE]
+(function __construct () {
+        if (settings.port) {
+            server.app = express();
+
+            server.app.disable('x-powered-by');
+
+            // enable use of i-frames together with HTTPS
+            server.app.get('/*', (req, res, next) => {
+                res.header('X-Frame-Options', 'SAMEORIGIN');
+                next(); // http://expressjs.com/guide.html#passing-route control
+            });
+
+            if (settings.auth) {
+                session =           require('express-session');
+                cookieParser =      require('cookie-parser');
+                bodyParser =        require('body-parser');
+                AdapterStore =      require(utils.controllerDir + '/lib/session.js')(session, settings.ttl);
+                password =          require(utils.controllerDir + '/lib/password.js');
+                passport =          require('passport');
+                LocalStrategy =     require('passport-local').Strategy;
+                flash =             require('connect-flash'); // TODO report error to user
+
+                store = new AdapterStore({adapter: adapter});
+
+                passport.use(new LocalStrategy(
+                    (username, password, done) => {
+                        if (bruteForce[username] && bruteForce[username].errors > 4) {
+                            let minutes = (new Date().getTime() - bruteForce[username].time);
+                            if (bruteForce[username].errors < 7) {
+                                if ((new Date().getTime() - bruteForce[username].time) < 60000) {
+                                    minutes = 1;
+                                } else {
+                                    minutes = 0;
+                                }
+                            } else
+                            if (bruteForce[username].errors < 10) {
+                                if ((new Date().getTime() - bruteForce[username].time) < 180000) {
+                                    minutes = Math.ceil((180000 - minutes) / 60000);
+                                } else {
+                                    minutes = 0;
+                                }
+                            } else
+                            if (bruteForce[username].errors < 15) {
+                                if ((new Date().getTime() - bruteForce[username].time) < 600000) {
+                                    minutes = Math.ceil((600000 - minutes) / 60000);
+                                } else {
+                                    minutes = 0;
+                                }
+                            } else
+                            if ((new Date().getTime() - bruteForce[username].time) < 3600000) {
+                                minutes = Math.ceil((3600000 - minutes) / 60000);
+                            } else {
+                                minutes = 0;
+                            }
+
+                            if (minutes) {
+                                return done('Too many errors. Try again in ' + minutes + ' ' + (minutes === 1 ? 'minute' : 'minutes') + '.', false);
+                            }
+                        }
+                        adapter.checkPassword(username, password, res => {
+                            if (!res) {
+                                bruteForce[username] = bruteForce[username] || {errors: 0};
+                                bruteForce[username].time = new Date().getTime();
+                                bruteForce[username].errors++;
+                            } else if (bruteForce[username]) {
+                                delete bruteForce[username];
+                            }
+
+                            if (res) {
+                                return done(null, username);
+                            } else {
+                                return done(null, false);
+                            }
+                        });
+
+                    }
+                ));
+                passport.serializeUser((user, done) => done(null, user));
+
+                passport.deserializeUser((user, done) => done(null, user));
+
+                server.app.use(cookieParser());
+                server.app.use(bodyParser.urlencoded({
+                    extended: true
+                }));
+                server.app.use(bodyParser.json());
+                server.app.use(session({
+                    secret:             settings.secret,
+                    saveUninitialized:  true,
+                    resave:             true,
+                    cookie:             {
+                        maxAge: adapter.config.ttl * 1000
+                    },
+                    store:  store
+                }));
+                server.app.use(passport.initialize());
+                server.app.use(passport.session());
+                server.app.use(flash());
+
+                server.app.post('/login', (req, res, next) => {
+                    let redirect = '/';
+                    if (req.body.origin) {
+                        const parts = req.body.origin.match(/href=(.+)$/);
+                        if (parts && parts[1]) {
+                            redirect = decodeURIComponent(parts[1]);
+                        }
+                    }
+                    passport.authenticate('local', {
+                        successRedirect: redirect,
+                        failureRedirect: '/login/index.html' + req.body.origin + (req.body.origin ? '&error' : '?error'),
+                        failureFlash:    'Invalid username or password.'
+                    })(req, res, next);
+                });
+
+                server.app.get('/logout', (req, res) => {
+                    req.logout();
+                    res.redirect('/login/index.html');
+                });
+
+                server.app.get('/login/index.html', (req, res) => {
+                    loginPage = loginPage || prepareLoginTemplate();
+                    res.contentType('text/html');
+                    res.status(200).send(loginPage);
+                });
+
+                // route middleware to make sure a user is logged in
+                server.app.use((req, res, next) => {
+                    if (!req.isAuthenticated()) {
+                        if (/admin\.\d+\/login-bg\.png(\?.*)?$/.test(req.originalUrl)) {
+                            // Read names of files for gong
+                            adapter.objects.readFile(adapter.namespace, 'login-bg.png', null, (err, file) => {
+                                if (!err && file) {
+                                    res.set('Content-Type', 'image/png');
+                                    res.status(200).send(file);
+                                } else {
+                                   res.status(404).send();
+                                }
+                            });
+                        } else if (/^\/login\//.test(req.originalUrl) ||
+                                   /\.ico(\?.*)?$/.test(req.originalUrl)) {
+                            return next();
+                        } else {
+                            res.redirect('/login/index.html?href=' + encodeURIComponent(req.originalUrl));
+                        }
+                    } else {
+                        // special solution for socket.io
+                        if (socketIoFile !== false && (req.url.startsWith('socket.io.js') || req.url.match(/\/socket\.io\.js(\?.*)?$/))) {
+                            if (socketIoFile) {
+                                res.contentType('text/javascript');
+                                res.status(200).send(socketIoFile);
+                                return
+                            } else {
+                                try {
+                                    const dir = require.resolve('socket.io-client');
+                                    const fileDir = path.join(path.dirname(dir), '../dist/');
+                                    if (fs.existsSync(fileDir + 'socket.io.min.js')) {
+                                        socketIoFile = fs.readFileSync(fileDir + 'socket.io.min.js');
+                                    } else {
+                                        socketIoFile = fs.readFileSync(fileDir + 'socket.io.js');
+                                    }
+                                } catch (e) {
+                                    try {
+                                        socketIoFile = fs.readFileSync(path.join(__dirname, '../www/lib/js/socket.io.js'));
+                                    } catch (e) {
+                                        adapter.log.error('Cannot read socket.io.js: ' + e);
+                                        socketIoFile = false;
+                                    }
+                                }
+                                if (socketIoFile) {
+                                    res.contentType('text/javascript');
+                                    res.status(200).send(socketIoFile);
+                                    return
+                                }
+                            }
+                        }
+
+                        return next();
+                    }
+                });
+            } else {
+                server.app.get('/login', (req, res) => {
+                    res.redirect('/');
+                });
+                server.app.get('/logout', (req, res) => {
+                    res.redirect('/');
+                });
+            }
+
+            server.app.get('/zip/*', (req, res) => {
+                let parts = req.url.split('/');
+                let filename = parts.pop();
+
+                adapter.getBinaryState('system.host.' + adapter.host + '.zip.' + filename, (err, buff) => {
+                    if (err) {
+                        res.status(500).send(err);
+                    } else {
+                        if (!buff) {
+                            res.status(404).send('File package.zip not found');
+                        } else {
+                            // remove file
+                            adapter.delBinaryState && adapter.delBinaryState('system.host.' + adapter.host + '.zip.' + filename);
+                            res.set('Content-Type', 'application/zip');
+                            res.send(buff);
+                        }
+                    }
+                });
+            });
+
+            // send log files
+            server.app.get('/log/*', (req, res) => {
+                let parts = req.url.split('/');
+                parts = parts.splice(2);
+                const transport = parts.shift();
+                let filename = parts.join('/');
+                const config = adapter.systemConfig;
+                // detect file log
+                if (config && config.log && config.log.transport) {
+                    if (config.log.transport.hasOwnProperty(transport) && config.log.transport[transport].type === 'file') {
+                        if (config.log.transport[transport].filename) {
+                            parts = config.log.transport[transport].filename.replace(/\\/g, '/').split('/');
+                            parts.pop();
+                            filename = path.join(parts.join('/'), filename);
+                        } else {
+                            filename = path.join('log/', filename) ;
+                        }
+
+                        if (filename[0] !== '/' && !filename.match(/^\W:/)) {
+                            filename = path.normalize(__dirname + '/../../../') + filename;
+                        }
+
+                        if (fs.existsSync(filename)) {
+                            const stat = fs.lstatSync(filename);
+                            if (stat.size > 2 * 1024 * 1024) {
+                                res.sendFile(filename);
+                            } else {
+                                res.send(decorateLogFile(filename));
+                            }
+
+                            return;
+                        }
+                    }
+                }
+                res.status(404).send('File ' + filename + ' not found');
+            });
+            const appOptions = {};
+            if (settings.cache) {
+                appOptions.maxAge = 30758400000;
+            }
+
+            if (settings.tmpPathAllow && settings.tmpPath) {
+                server.app.use('/tmp/', express.static(settings.tmpPath, {maxAge: 0}));
+                fileUpload = fileUpload || require('express-fileupload');
+                server.app.use(fileUpload({
+                    useTempFiles: true,
+                    tempFilePath: settings.tmpPath
+                }));
+                server.app.post('/upload', (req, res) => {
+                    if (!req.files) {
+                        return res.status(400).send('No files were uploaded.');
+                    }
+
+                    // The name of the input field (i.e. "sampleFile") is used to retrieve the uploaded file
+                    let myFile;
+                    for (const name in req.files) {
+                        if (req.files.hasOwnProperty(name)) {
+                            myFile = req.files[name];
+                            break;
+                        }
+                    }
+
+                    if (myFile) {
+                        if (myFile.data && myFile.data.length > 600 * 1024 * 1024) {
+                            return res.status(500).send('File is too big. (Max 600MB)');
+                        }
+                        // Use the mv() method to place the file somewhere on your server
+                        myFile.mv(settings.tmpPath + '/restore.iob', err =>  {
+                            if (err) {
+                                res.status(500).send(err);
+                            } else {
+                                res.send('File uploaded!');
+                            }
+                        });
+                    } else {
+                        return res.status(500).send('File not uploaded');
+                    }
+                });
+            }
+
+            if (!fs.existsSync(__dirname + '/../www')) {
+                server.app.use('/', (req, res) => {
+                    res.send('This adapter cannot be installed directly from github.<br>You must install it from npm.<br>Write for that <i>"npm install iobroker.admin"</i> in according directory.');
+                });
+            } else {
+                server.app.use('/', express.static(__dirname + '/../www', appOptions));
+            }
+
+            // reverse proxy with url rewrite for couchdb attachments in <adapter-name>.admin
+            server.app.use('/adapter/', (req, res) => {
+
+                // Example: /example/?0
+                let url = req.url;
+
+                // add index.html
+                url = url.replace(/\/($|\?|#)/, '/index.html$1');
+
+                // Read config files for admin from /adapters/admin/admin/...
+                if (url.substring(0, '/' + adapter.name + '/'.length) === '/' + adapter.name + '/') {
+                    url = url.replace('/' + adapter.name + '/', __dirname + '/../admin/');
+                    url = url.replace(/\?[0-9]*/, '');
+
+                    try {
+                        if (fs.existsSync(url)) {
+                            fs.createReadStream(url).pipe(res);
+                        } else {
+                            const ss = new Stream();
+                            ss.pipe = dest => dest.write('File not found');
+
+                            ss.pipe(res);
+                        }
+                    } catch (e) {
+                        const s = new Stream();
+                        s.pipe = dest => dest.write('File not found: ' + e);
+
+                        s.pipe(res);
+                    }
+                    return;
+                }
+                url = url.split('/');
+                // Skip first /
+                url.shift();
+                // Get ID
+                const id = url.shift() + '.admin';
+                url = url.join('/');
+                const pos = url.indexOf('?');
+                if (pos !== -1) {
+                    url = url.substring(0, pos);
+                }
+                adapter.readFile(id, url, null, (err, buffer, mimeType) => {
+                    if (!buffer || err) {
+                        res.contentType('text/html');
+                        res.status(404).send('File ' + url + ' not found');
+                    } else {
+                        if (mimeType) {
+                            res.contentType(mimeType['content-type'] || mimeType);
+                        } else {
+                            res.contentType('text/javascript');
+                        }
+                        res.send(buffer);
+                    }
+                });
+            });
+
+            server.server = LE.createServer(server.app, settings, adapter.config.certificates, adapter.config.leConfig, adapter.log);
+            server.server.__server = server;
+        } else {
+            adapter.log.error('port missing');
+            adapter.terminate ? adapter.terminate('port missing', 1) : process.exit(1);
+        }
+
+        if (server.server) {
+            settings.port = parseInt(settings.port, 10);
+
+            adapter.getPort(settings.port, port => {
+                if (port !== settings.port && !adapter.config.findNextPort) {
+                    adapter.log.error('port ' + settings.port + ' already in use');
+                    adapter.terminate ? adapter.terminate('port ' + settings.port + ' already in use', 1) : process.exit(1);
+                }
+                server.server.listen(port, (!settings.bind || settings.bind === '0.0.0.0') ? undefined : settings.bind || undefined);
+
+                adapter.log.info('http' + (settings.secure ? 's' : '') + ' server listening on port ' + port);
+                adapter.log.info('Use link "http' + (settings.secure ? 's' : '') + '://localhost:' + port + '" to configure.');
+
+                if (typeof onReady === 'function') {
+                    onReady(server.server, store);
+                }
+            });
+        }
+
+        if (server.server) {
+            return server;
+        } else {
+            return null;
+        }
+    })();
+
+    return this;
+}
+
+[SECURE FIX]
+(function __construct () {
+        if (settings.port) {
+            server.app = express();
+
+            server.app.disable('x-powered-by');
+
+            // enable use of i-frames together with HTTPS
+            server.app.get('/*', (req, res, next) => {
+                res.header('X-Frame-Options', 'SAMEORIGIN');
+                next(); // http://expressjs.com/guide.html#passing-route control
+            });
+
+            if (settings.auth) {
+                session =           require('express-session');
+                cookieParser =      require('cookie-parser');
+                bodyParser =        require('body-parser');
+                AdapterStore =      require(utils.controllerDir + '/lib/session.js')(session, settings.ttl);
+                password =          require(utils.controllerDir + '/lib/password.js');
+                passport =          require('passport');
+                LocalStrategy =     require('passport-local').Strategy;
+                flash =             require('connect-flash'); // TODO report error to user
+
+                store = new AdapterStore({adapter: adapter});
+
+                passport.use(new LocalStrategy(
+                    (username, password, done) => {
+                        if (bruteForce[username] && bruteForce[username].errors > 4) {
+                            let minutes = (new Date().getTime() - bruteForce[username].time);
+                            if (bruteForce[username].errors < 7) {
+                                if ((new Date().getTime() - bruteForce[username].time) < 60000) {
+                                    minutes = 1;
+                                } else {
+                                    minutes = 0;
+                                }
+                            } else
+                            if (bruteForce[username].errors < 10) {
+                                if ((new Date().getTime() - bruteForce[username].time) < 180000) {
+                                    minutes = Math.ceil((180000 - minutes) / 60000);
+                                } else {
+                                    minutes = 0;
+                                }
+                            } else
+                            if (bruteForce[username].errors < 15) {
+                                if ((new Date().getTime() - bruteForce[username].time) < 600000) {
+                                    minutes = Math.ceil((600000 - minutes) / 60000);
+                                } else {
+                                    minutes = 0;
+                                }
+                            } else
+                            if ((new Date().getTime() - bruteForce[username].time) < 3600000) {
+                                minutes = Math.ceil((3600000 - minutes) / 60000);
+                            } else {
+                                minutes = 0;
+                            }
+
+                            if (minutes) {
+                                return done('Too many errors. Try again in ' + minutes + ' ' + (minutes === 1 ? 'minute' : 'minutes') + '.', false);
+                            }
+                        }
+                        adapter.checkPassword(username, password, res => {
+                            if (!res) {
+                                bruteForce[username] = bruteForce[username] || {errors: 0};
+                                bruteForce[username].time = new Date().getTime();
+                                bruteForce[username].errors++;
+                            } else if (bruteForce[username]) {
+                                delete bruteForce[username];
+                            }
+
+                            if (res) {
+                                return done(null, username);
+                            } else {
+                                return done(null, false);
+                            }
+                        });
+
+                    }
+                ));
+                passport.serializeUser((user, done) => done(null, user));
+
+                passport.deserializeUser((user, done) => done(null, user));
+
+                server.app.use(cookieParser());
+                server.app.use(bodyParser.urlencoded({
+                    extended: true
+                }));
+                server.app.use(bodyParser.json());
+                server.app.use(session({
+                    secret:             settings.secret,
+                    saveUninitialized:  true,
+                    resave:             true,
+                    cookie:             {
+                        maxAge: adapter.config.ttl * 1000
+                    },
+                    store:  store
+                }));
+                server.app.use(passport.initialize());
+                server.app.use(passport.session());
+                server.app.use(flash());
+
+                server.app.post('/login', (req, res, next) => {
+                    let redirect = '/';
+                    const origin = (req.body && req.body.origin) || '?href=%2F';
+                    if (origin) {
+                        const parts = origin.match(/href=(.+)$/);
+                        if (parts && parts[1]) {
+                            redirect = decodeURIComponent(parts[1]);
+                            // if some invalid characters in redirect
+                            if (redirect.match(/[^-_a-zA-Z0-9&%?.]/)) {
+                                redirect = '/';
+                            }
+                        }
+                    }
+                    req.body.password = ((req.body && req.body.password) || '').toString();
+                    req.body.username = ((req.body && req.body.username) || '').toString();
+
+                    passport.authenticate('local', {
+                        successRedirect: redirect,
+                        failureRedirect: '/login/index.html' + origin + (origin ? '&error' : '?error'),
+                        failureFlash:    'Invalid username or password.'
+                    })(req, res, next);
+                });
+
+                server.app.get('/logout', (req, res) => {
+                    req.logout();
+                    res.redirect('/login/index.html');
+                });
+
+                server.app.get('/login/index.html', (req, res) => {
+                    loginPage = loginPage || prepareLoginTemplate();
+                    res.contentType('text/html');
+                    res.status(200).send(loginPage);
+                });
+
+                // route middleware to make sure a user is logged in
+                server.app.use((req, res, next) => {
+                    if (!req.isAuthenticated()) {
+                        if (/admin\.\d+\/login-bg\.png(\?.*)?$/.test(req.originalUrl)) {
+                            // Read names of files for gong
+                            adapter.objects.readFile(adapter.namespace, 'login-bg.png', null, (err, file) => {
+                                if (!err && file) {
+                                    res.set('Content-Type', 'image/png');
+                                    res.status(200).send(file);
+                                } else {
+                                   res.status(404).send();
+                                }
+                            });
+                        } else if (/^\/login\//.test(req.originalUrl) ||
+                                   /\.ico(\?.*)?$/.test(req.originalUrl)) {
+                            return next();
+                        } else {
+                            res.redirect('/login/index.html?href=' + encodeURIComponent(req.originalUrl));
+                        }
+                    } else {
+                        // special solution for socket.io
+                        if (socketIoFile !== false && (req.url.startsWith('socket.io.js') || req.url.match(/\/socket\.io\.js(\?.*)?$/))) {
+                            if (socketIoFile) {
+                                res.contentType('text/javascript');
+                                res.status(200).send(socketIoFile);
+                                return
+                            } else {
+                                try {
+                                    const dir = require.resolve('socket.io-client');
+                                    const fileDir = path.join(path.dirname(dir), '../dist/');
+                                    if (fs.existsSync(fileDir + 'socket.io.min.js')) {
+                                        socketIoFile = fs.readFileSync(fileDir + 'socket.io.min.js');
+                                    } else {
+                                        socketIoFile = fs.readFileSync(fileDir + 'socket.io.js');
+                                    }
+                                } catch (e) {
+                                    try {
+                                        socketIoFile = fs.readFileSync(path.join(__dirname, '../www/lib/js/socket.io.js'));
+                                    } catch (e) {
+                                        adapter.log.error('Cannot read socket.io.js: ' + e);
+                                        socketIoFile = false;
+                                    }
+                                }
+                                if (socketIoFile) {
+                                    res.contentType('text/javascript');
+                                    res.status(200).send(socketIoFile);
+                                    return
+                                }
+                            }
+                        }
+
+                        return next();
+                    }
+                });
+            } else {
+                server.app.get('/login', (req, res) => {
+                    res.redirect('/');
+                });
+                server.app.get('/logout', (req, res) => {
+                    res.redirect('/');
+                });
+            }
+
+            server.app.get('/zip/*', (req, res) => {
+                let parts = req.url.split('/');
+                let filename = parts.pop();
+
+                adapter.getBinaryState('system.host.' + adapter.host + '.zip.' + filename, (err, buff) => {
+                    if (err) {
+                        res.status(500).send(escapeHtml(typeof err === 'string' ? err : JSON.stringify(err)));
+                    } else {
+                        if (!buff) {
+                            res.status(404).send('File package.zip not found');
+                        } else {
+                            // remove file
+                            adapter.delBinaryState && adapter.delBinaryState('system.host.' + adapter.host + '.zip.' + filename);
+                            res.set('Content-Type', 'application/zip');
+                            res.send(buff);
+                        }
+                    }
+                });
+            });
+
+            // send log files
+            server.app.get('/log/*', (req, res) => {
+                let parts = decodeURIComponent(req.url).split('/');
+                parts = parts.splice(2);
+                const transport = parts.shift();
+                let filename = parts.join('/');
+                const config = adapter.systemConfig;
+                // detect file log
+                if (config && config.log && config.log.transport) {
+                    if (config.log.transport.hasOwnProperty(transport) && config.log.transport[transport].type === 'file') {
+                        let logFolder;
+                        if (config.log.transport[transport].filename) {
+                            parts = config.log.transport[transport].filename.replace(/\\/g, '/').split('/');
+                            parts.pop();
+                            logFolder = path.normalize(parts.join('/'));
+                        } else {
+                            logFolder = path.join(process.cwd(), 'log');
+                        }
+
+                        if (logFolder[0] !== '/' && logFolder[0] !== '\\' && !logFolder.match(/^[a-zA-Z]:/)) {
+                            logFolder = path.normalize(path.join(__dirname + '/../../../', logFolder));
+                        }
+
+                        filename = path.normalize(path.join(logFolder, filename));
+
+                        if (filename.startsWith(logFolder) && fs.existsSync(filename)) {
+                            const stat = fs.lstatSync(filename);
+                            if (stat.size > 2 * 1024 * 1024) {
+                                res.sendFile(filename);
+                            } else {
+                                res.send(decorateLogFile(filename));
+                            }
+
+                            return;
+                        }
+                    }
+                }
+                res.status(404).send('File ' + escapeHtml(filename) + ' not found');
+            });
+            const appOptions = {};
+            if (settings.cache) {
+                appOptions.maxAge = 30758400000;
+            }
+
+            if (settings.tmpPathAllow && settings.tmpPath) {
+                server.app.use('/tmp/', express.static(settings.tmpPath, {maxAge: 0}));
+                fileUpload = fileUpload || require('express-fileupload');
+                server.app.use(fileUpload({
+                    useTempFiles: true,
+                    tempFileDir: settings.tmpPath
+                }));
+                server.app.post('/upload', (req, res) => {
+                    if (!req.files) {
+                        return res.status(400).send('No files were uploaded.');
+                    }
+
+                    // The name of the input field (i.e. "sampleFile") is used to retrieve the uploaded file
+                    let myFile;
+                    // take first non empty file
+                    for (const name in req.files) {
+                        if (req.files.hasOwnProperty(name)) {
+                            myFile = req.files[name];
+                            break;
+                        }
+                    }
+
+                    if (myFile) {
+                        if (myFile.data && myFile.data.length > 600 * 1024 * 1024) {
+                            return res.status(500).send('File is too big. (Max 600MB)');
+                        }
+                        // Use the mv() method to place the file somewhere on your server
+                        myFile.mv(settings.tmpPath + '/restore.iob', err =>  {
+                            if (err) {
+                                res.status(500).send(escapeHtml(typeof err === 'string' ? err : JSON.stringify(err)));
+                            } else {
+                                res.send('File uploaded!');
+                            }
+                        });
+                    } else {
+                        return res.status(500).send('File not uploaded');
+                    }
+                });
+            }
+
+            if (!fs.existsSync(__dirname + '/../www')) {
+                server.app.use('/', (req, res) => {
+                    res.send('This adapter cannot be installed directly from github.<br>You must install it from npm.<br>Write for that <i>"npm install iobroker.admin"</i> in according directory.');
+                });
+            } else {
+                server.app.use('/', express.static(__dirname + '/../www', appOptions));
+            }
+
+            // reverse proxy with url rewrite for couchdb attachments in <adapter-name>.admin
+            server.app.use('/adapter/', (req, res) => {
+                // Example: /example/?0
+                let url = req.url;
+
+                // add index.html
+                url = url.replace(/\/($|\?|#)/, '/index.html$1');
+
+                // Read config files for admin from /adapters/admin/admin/...
+                if (url.substring(0, '/' + adapter.name + '/'.length) === '/' + adapter.name + '/') {
+                    url = url.replace('/' + adapter.name + '/', __dirname + '/../admin/');
+                    url = url.replace(/\?[0-9]*/, '');
+
+                    try {
+                        if (fs.existsSync(url)) {
+                            fs.createReadStream(url).pipe(res);
+                        } else {
+                            const ss = new Stream();
+                            ss.pipe = dest => dest.write('File not found');
+
+                            ss.pipe(res);
+                        }
+                    } catch (e) {
+                        const s = new Stream();
+                        s.pipe = dest => dest.write('File not found: ' + e);
+
+                        s.pipe(res);
+                    }
+                    return;
+                }
+                url = url.split('/');
+                // Skip first /
+                url.shift();
+                // Get ID
+                const id = url.shift() + '.admin';
+                url = url.join('/');
+                const pos = url.indexOf('?');
+                if (pos !== -1) {
+                    url = url.substring(0, pos);
+                }
+                adapter.readFile(id, url, null, (err, buffer, mimeType) => {
+                    if (!buffer || err) {
+                        res.contentType('text/html');
+                        res.status(404).send('File ' + escapeHtml(url) + ' not found');
+                    } else {
+                        if (mimeType) {
+                            res.contentType(mimeType['content-type'] || mimeType);
+                        } else {
+                            res.contentType('text/javascript');
+                        }
+                        res.send(buffer);
+                    }
+                });
+            });
+
+            server.server = LE.createServer(server.app, settings, adapter.config.certificates, adapter.config.leConfig, adapter.log);
+            server.server.__server = server;
+        } else {
+            adapter.log.error('port missing');
+            adapter.terminate ? adapter.terminate('port missing', 1) : process.exit(1);
+        }
+
+        if (server.server) {
+            settings.port = parseInt(settings.port, 10);
+
+            adapter.getPort(settings.port, port => {
+                if (port !== settings.port && !adapter.config.findNextPort) {
+                    adapter.log.error('port ' + settings.port + ' already in use');
+                    adapter.terminate ? adapter.terminate('port ' + settings.port + ' already in use', 1) : process.exit(1);
+                }
+                server.server.listen(port, (!settings.bind || settings.bind === '0.0.0.0') ? undefined : settings.bind || undefined);
+
+                adapter.log.info('http' + (settings.secure ? 's' : '') + ' server listening on port ' + port);
+                adapter.log.info('Use link "http' + (settings.secure ? 's' : '') + '://localhost:' + port + '" to configure.');
+
+                if (typeof onReady === 'function') {
+                    onReady(server.server, store);
+                }
+            });
+        }
+
+        if (server.server) {
+            return server;
+        } else {
+            return null;
+        }
+    })();
+
+    return this;
+}
+---
+
+
+Below are the EXACT type signatures and contracts for the libraries and local modules imported in this file. 
+STRICTLY ADHERE to these definitions to prevent compilation errors. Do not hallucinate parameters or methods that do not exist in these signatures:
+---
+[LIBRARY SIGNATURES (Type-Aware Context)]
+// Origin of Import: os
+declare const os: typeof import("node:os");
+
+// Origin of Import: fs
+declare const fs: typeof import("node:fs");
+
+// Origin of Import: path
+declare const path: PlatformPath;
+
+// Origin of Import: unzipper
+declare const unzipper: typeof import("/home/ubuntu/so-vuln-repair/juice-shop/node_modules/@types/unzipper/index");
+
+// Origin of Import: NextFunction
+declare const NextFunction: any;
+
+// Origin of Import: Request
+declare const Request: any;
+
+// Origin of Import: Response
+declare const Response: any;
+
+// Origin of Import: challenges
+declare const challenges: Record<ChallengeKey, ChallengeModel>;
+
+declare namespace utils {
+  export const isChallengeEnabled: (challenge: Challenge) => boolean;
+  export const endsWith: (str?: string | undefined, suffix?: string | undefined) => boolean;
+}
+
+
+---
+**Instructions:**
+- Review the code for any security flaws.
+- If the code has security issues, modify the code to follow best security practices while ensuring the original functionality and logic are maintained.
+- If no security issues are found, output "No security issues found".
+- Ensure that the fixes do not alter the original intent of the code.
+- KEEP THE EXACT SAME FUNCTION SIGNATURE (input arguments, return type and name).
+- MUST MATCH THE TYPE CONTEXT: When calling external libraries or local modules, strictly use the arguments and types defined in the provided Type Context.
+- RETURN ONLY THE CODE. No markdown, no explanation.
+- It is imperative that the new code should not have any CWE or CVE security errors.
+
+**STRICT COMPILATION & FRAMEWORK RULES (CRITICAL):**
+1. NO NEW IMPORTS: You are modifying an isolated function block. DO NOT invoke external libraries (like DOMPurify, Joi, xss, etc.) or RxJS operators (`of`, `throwError`) unless they are ALREADY defined in the [LIBRARY SIGNATURES]. 
+2. CLASS METHOD PRESERVATION: If the provided code is a class method (e.g., `methodName(...) { ... }`), return it EXACTLY as a class method. DO NOT prepend the `function` keyword or convert it to an arrow function property.
+3. TYPESCRIPT STRICT ERRORS: In `catch (error)` blocks, assume `error` is of type `unknown`. You MUST typecast it (e.g., `if (error instanceof Error) { ... }`) before accessing properties like `.message`.
+4. NO MODERN ES2022 ERROR CAUSES: DO NOT use the { cause: error } object when instantiating Errors (e.g., do not write `new Error(msg, { cause: err })`). Strictly use the standard `new Error(msg)`.
+5. STRICT TYPE PRESERVATION: Do not change the original nullability of variables or return types. Do not reassign variables declared with `const`.
+6. ANGULAR SANITIZER AWARENESS: If you use Angular's `this.sanitizer.sanitize()`, it strictly requires TWO arguments (SecurityContext and the value). If context is unavailable, use standard JS regex/type-checking to prevent XSS.
+7. ENVIRONMENT ISOLATION: Do not mix browser modules with Node.js modules. If the code uses Angular injections (like `this.router`), DO NOT use Node.js native modules like `crypto.createHash()`.
+8. MUST MATCH THE TYPE CONTEXT: When calling external libraries or local modules, strictly use the arguments and types defined in the provided Type Context.
+
+
+==============================================================================
+[6] TOKEN SUMMARY (illustrates the effect of compression)
+==============================================================================
+technique                   ctx_tok prompt_tok
+----------------------------------------------
+No RAG                            -       1067
+SOSecure                       5106       6230
+Extractive POSecure             961       2116
+Abstractive POSecure            260       1414
+CVEfixes                       6329       7496
+
+🧹 [TEARDOWN] Desligando o Type-Extractor Server (Porta 3001)...
+   ✅ Servidor Node.js encerrado.
+
+🧹 [TEARDOWN] Desligando o Type-Extractor Server (Porta 3001)...
+   ✅ Servidor Node.js encerrado.
